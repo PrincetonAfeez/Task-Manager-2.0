@@ -1,0 +1,198 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  DJANGO_ENV: test
+
+jobs:
+  lint:
+    name: Lint and static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: ruff
+        run: ruff check .
+      - name: bandit (security lint)
+        run: bandit -q -r . -x ./tests,./staticfiles --severity-level medium
+
+  deploy-check:
+    name: Django deploy checklist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # Fails on any deployment warning. This is the gate that would have caught the
+      # original DEBUG=1 default and the missing security headers.
+      - name: Generate a throwaway field-encryption key
+        id: keys
+        run: echo "field_key=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_OUTPUT"
+      - name: check --deploy (production profile, strict)
+        env:
+          DJANGO_ENV: production
+          DJANGO_DEBUG: "0"
+          # Must satisfy the production guard (50+ characters); the previous 47-character
+          # placeholder made this job fail before it checked anything.
+          DJANGO_SECRET_KEY: ci-only-not-a-real-secret-key-for-the-deploy-check-job-0123456789
+          DJANGO_ALLOWED_HOSTS: example.com
+          DB_ENGINE: django.db.backends.postgresql
+          DB_NAME: task_manager
+          REDIS_URL: redis://localhost:6379/0
+          # A production deployment is expected to set both; the deploy checks warn otherwise.
+          FIELD_ENCRYPTION_KEYS: ${{ steps.keys.outputs.field_key }}
+          ATTACHMENT_SCAN_BACKEND: clamav
+        run: python manage.py check --deploy --fail-level WARNING
+
+      - name: Models and migrations are in sync
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Every migration is reversible
+        run: |
+          python - <<'PY'
+          import os
+          import django
+
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          os.environ.setdefault("DJANGO_ENV", "test")
+          django.setup()
+
+          from django.db.migrations.loader import MigrationLoader
+
+          loader = MigrationLoader(None, ignore_no_migrations=True)
+          irreversible = []
+          for (app, name), migration in loader.disk_migrations.items():
+              if app in {"admin", "auth", "contenttypes", "sessions"}:
+                  continue
+              for operation in migration.operations:
+                  if not operation.reversible:
+                      irreversible.append(f"{app}.{name}: {operation.__class__.__name__}")
+          if irreversible:
+              raise SystemExit("Irreversible migrations block rollback:\n  " + "\n  ".join(irreversible))
+          print("All project migrations are reversible.")
+          PY
+
+  test-sqlite:
+    name: Tests (SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: pytest with coverage
+        run: pytest --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=85
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-sqlite
+          path: coverage.xml
+
+  test-postgres:
+    name: Tests (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Same major version as docker-compose.yml and the pg client tools in the image.
+        image: postgres:17
+        env:
+          POSTGRES_DB: task_manager_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      # SQLite hides concurrency bugs: it has no SELECT ... FOR UPDATE SKIP LOCKED, so the
+      # queue takes a different claim path there. Production behaviour is only proven here.
+      - name: pytest against Postgres
+        env:
+          DB_ENGINE: django.db.backends.postgresql
+          DB_NAME: task_manager_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_REQUIRE_SSL: "0"
+        run: pytest -q
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install pip-audit
+      - name: pip-audit
+        run: pip-audit -r requirements.txt --desc
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    needs: [lint, deploy-check]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: task-manager:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: The image boots and answers /healthz
+        run: |
+          docker run -d --name tm-ci -p 8000:8000 \
+            -e DJANGO_ENV=development \
+            -e DJANGO_DEBUG=0 \
+            -e DJANGO_SECRET_KEY=ci-only-not-a-real-secret-key-for-the-image-boot-check-0123456789 \
+            -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            task-manager:ci
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/healthz; then
+              echo "healthy"; exit 0
+            fi
+            sleep 2
+          done
+          echo "container never became healthy"; docker logs tm-ci; exit 1

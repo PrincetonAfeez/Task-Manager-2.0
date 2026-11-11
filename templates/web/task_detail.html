@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title }} · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ task.task_list.name }}{% if task.column %} / {{ task.column.name }}{% endif %}</p>
+    <h1 class="{% if task.status == 'completed' %}line-through{% endif %}">{{ task.title }}</h1>
+  </div>
+  <div class="page-actions">
+    {% if "task.edit" in can %}<a class="button" href="{% url 'task_edit' task.id %}">Edit</a>{% endif %}
+    {% if "task.delete" in can %}
+      <form method="post" action="{% url 'task_archive' task.id %}" data-confirm="Archive this task?">
+        {% csrf_token %}
+        <button class="button ghost" type="submit">Archive</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+
+<div class="content-grid">
+  <div class="main-column">
+    <section class="panel">
+      <div class="panel-heading"><h2>Details</h2></div>
+      <dl class="detail-grid">
+        <dt>Status</dt><dd><mark class="status status-{{ task.status }}">{{ task.get_status_display }}</mark></dd>
+        <dt>Priority</dt><dd>P{{ task.priority }} — {{ task.get_priority_display }}</dd>
+        <dt>Due</dt><dd>{% if task.due_date %}{{ task.due_date }}{% if task.due_time %} {{ task.due_time|time:"g:i A" }}{% endif %}{% if task.is_overdue %} <span class="is-alert">overdue</span>{% endif %}{% else %}Not scheduled{% endif %}</dd>
+        <dt>Assignee</dt><dd>{% if task.assignee %}{{ task.assignee.get_username }}{% else %}Unassigned{% endif %}</dd>
+        <dt>Created by</dt><dd>{{ task.creator.get_username }} · {{ task.created_at|date:"j M Y" }}</dd>
+        {% if task.estimate_minutes %}<dt>Estimate</dt><dd>{{ task.estimate_minutes }} min</dd>{% endif %}
+        <dt>Version</dt><dd>{{ task.version }}</dd>
+      </dl>
+      {% if task.notes %}<div class="notes">{{ task.notes|linebreaks }}</div>{% endif %}
+      {% if task.labels.all %}
+        <div class="task-meta">{% for label in task.labels.all %}<span class="chip">#{{ label.name }}</span>{% endfor %}</div>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><h2>Subtasks</h2></div>
+      <ul class="subtask-list" id="subtask-list">
+        {% for subtask in task.subtasks.all %}
+          {% include "web/partials/subtask.html" %}
+        {% empty %}
+          <li class="empty">No subtasks.</li>
+        {% endfor %}
+      </ul>
+      {% if "task.edit" in can %}
+        <form method="post" action="{% url 'subtask_create' task.id %}"
+              hx-post="{% url 'subtask_create' task.id %}" hx-target="#subtask-list" hx-swap="beforeend">
+          {% csrf_token %}
+          <label class="sr-only" for="subtask-title">Subtask</label>
+          <input id="subtask-title" name="title" maxlength="180" placeholder="Add a subtask" required>
+          <button type="submit">Add</button>
+        </form>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><h2>Comments</h2></div>
+      <div id="comment-list">
+        {% for comment in task.comments.all %}
+          {% include "web/partials/comment.html" %}
+        {% empty %}
+          <p class="empty">No comments yet.</p>
+        {% endfor %}
+      </div>
+      {% if "comment.create" in can %}
+        <form method="post" action="{% url 'comment_create' task.id %}"
+              hx-post="{% url 'comment_create' task.id %}" hx-target="#comment-list" hx-swap="beforeend">
+          {% csrf_token %}
+          {{ comment_form.body }}
+          <button type="submit">Comment</button>
+        </form>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="side-column">
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Attachments</h2></div>
+      <ul class="attachment-list" id="attachment-list">
+        {% for attachment in task.attachments.all %}
+          {% include "web/partials/attachment.html" %}
+        {% empty %}
+          <li class="empty">None.</li>
+        {% endfor %}
+      </ul>
+      {% if "attachment.upload" in can %}
+        <form method="post" action="{% url 'attachment_upload' task.id %}" enctype="multipart/form-data">
+          {% csrf_token %}
+          {{ attachment_form.file }}
+          <button type="submit">Upload</button>
+        </form>
+      {% endif %}
+    </section>
+
+    {% if blockers or blocking %}
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Dependencies</h2></div>
+      {% for dep in blockers %}
+        <div class="list-line"><span>Blocked by</span><a href="{% url 'task_detail' dep.blocking_task_id %}">{{ dep.blocking_task.title }}</a></div>
+      {% endfor %}
+      {% for dep in blocking %}
+        <div class="list-line"><span>Blocks</span><a href="{% url 'task_detail' dep.blocked_task_id %}">{{ dep.blocked_task.title }}</a></div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Reminders</h2></div>
+      {% for reminder in task.reminders.all %}
+        <div class="list-line">
+          <span>{{ reminder.remind_at|date:"j M H:i" }}</span>
+          <strong>{{ reminder.get_status_display }}</strong>
+        </div>
+      {% empty %}
+        <p class="empty">No reminders armed.</p>
+      {% endfor %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

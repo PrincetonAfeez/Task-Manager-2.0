@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Sharing · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Public share links</h1></section>
+
+{% if new_url %}
+  <section class="panel highlight">
+    <h2>Copy this link now</h2>
+    <p>Anyone with this URL can view the list read-only. It is not shown again.</p>
+    <code class="token">{{ new_url }}</code>
+  </section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-heading"><h2>Active links</h2></div>
+  <table class="data-table">
+    <thead><tr><th scope="col">List</th><th scope="col">Label</th><th scope="col">Views</th><th scope="col">Expires</th><th scope="col">State</th><th scope="col"></th></tr></thead>
+    <tbody>
+      {% for link in links %}
+        <tr>
+          <td>{{ link.task_list.name }}</td>
+          <td>{{ link.label|default:"-" }}</td>
+          <td>{{ link.view_count }}</td>
+          <td>{% if link.expires_at %}{{ link.expires_at|date:"j M Y" }}{% else %}Never{% endif %}</td>
+          <td>
+            {% if link.is_live %}
+              <mark class="status status-succeeded">Live</mark>
+            {% else %}
+              <mark class="status status-dead">Revoked or expired</mark>
+            {% endif %}
+          </td>
+          <td>
+            {% if link.is_live %}
+              <form method="post" action="{% url 'share_link_revoke' link.id %}" data-confirm="Revoke this link? It stops working immediately.">
+                {% csrf_token %}
+                <button type="submit" class="button ghost">Revoke</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="empty">No share links.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Create a link</h2></div>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create share link</button>
+  </form>
+  <p class="hint">
+    Shared views are read-only, show no member names, and are excluded from search engines.
+    The token is stored hashed, so a database leak yields no working links.
+  </p>
+</section>
+{% endblock %}

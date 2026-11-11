@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Workspace settings · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Workspace settings</h1></section>
+
+<form method="post" class="stacked-form">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Save</button>
+</form>
+
+{% if "org.delete" in can %}
+<section class="panel danger-zone">
+  <div class="panel-heading"><h2>Delete workspace</h2></div>
+  <p>
+    Deleting schedules this workspace and all of its data for permanent erasure after
+    30 days. Contact support inside that window to restore it.
+  </p>
+  <form method="post" action="{% url 'workspace_delete' %}" data-confirm="This deletes the workspace and all of its data. Continue?">
+    {% csrf_token %}
+    <label for="confirm-name">Type <strong>{{ active_organization.name }}</strong> to confirm</label>
+    <input id="confirm-name" name="confirm" autocomplete="off" required>
+    <button type="submit" class="button danger">Delete workspace</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

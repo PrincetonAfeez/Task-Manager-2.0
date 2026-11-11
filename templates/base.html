@@ -1,0 +1,99 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>{% block title %}Task Manager{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {# htmx is vendored locally: a CDN <script> is both a supply-chain dependency and #}
+  {# incompatible with the strict script-src 'self' Content-Security-Policy. #}
+  <script src="{% static 'js/htmx.min.js' %}" defer></script>
+  <script src="{% static 'js/app.js' %}" defer></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="shell-header">
+    <a class="brand" href="{% url 'dashboard' %}">
+      <span class="brand-mark" aria-hidden="true">TM</span>
+      <span>Task Manager</span>
+    </a>
+
+    {% if request.user.is_authenticated and active_organization %}
+      <nav class="top-nav" aria-label="Primary">
+        <a href="{% url 'dashboard' %}">Today</a>
+        <a href="{% url 'task_list' %}">Tasks</a>
+        <a href="{% url 'board' %}">Board</a>
+        {% if "automation.view" in can %}<a href="{% url 'automation' %}">Automation</a>{% endif %}
+        <a href="{% url 'analytics' %}">Analytics</a>
+        <a href="{% url 'notification_list' %}">
+          Inbox{% if unread_count %} <span class="badge" aria-label="{{ unread_count }} unread">{{ unread_count }}</span>{% endif %}
+        </a>
+      </nav>
+
+      <div class="shell-actions">
+        {% if user_organizations|length > 1 %}
+          <div class="workspace-switcher">
+            <label class="sr-only" for="workspace-select">Workspace</label>
+            <select id="workspace-select" data-switch-template="/workspaces/__ID__/switch/">
+              {% for org in user_organizations %}
+                <option value="{{ org.id }}" {% if org.id == active_organization.id %}selected{% endif %}>{{ org.name }}</option>
+              {% endfor %}
+            </select>
+            <form method="post" id="workspace-switch-form" action="{% url 'workspace_switch' active_organization.id %}">
+              {% csrf_token %}
+            </form>
+          </div>
+        {% else %}
+          <span class="workspace-name">{{ active_organization.name }}</span>
+        {% endif %}
+
+        <details class="menu">
+          <summary aria-label="Account menu">{{ request.user.get_username }}</summary>
+          <div class="menu-panel">
+            <a href="{% url 'settings_notifications' %}">Notifications</a>
+            {% if "org.settings" in can %}<a href="{% url 'settings_workspace' %}">Workspace</a>{% endif %}
+            {% if "org.settings" in can %}<a href="{% url 'settings_members' %}">Members</a>{% endif %}
+            {% if "api_key.manage" in can %}<a href="{% url 'settings_api_keys' %}">API keys</a>{% endif %}
+            {% if "audit.view" in can %}<a href="{% url 'settings_audit' %}">Audit log</a>{% endif %}
+            <a href="{% url 'workspace_create' %}">New workspace</a>
+            {% if "org.settings" in can %}<a href="{% url 'workspace_security' %}">Security &amp; SSO</a>{% endif %}
+            <a href="{% url 'account_security' %}">Account security</a>
+            <form action="{% url 'logout' %}" method="post">
+              {% csrf_token %}
+              <button type="submit" class="link-button">Sign out</button>
+            </form>
+          </div>
+        </details>
+      </div>
+    {% else %}
+      <nav class="top-nav" aria-label="Primary">
+        <a href="{% url 'login' %}">Sign in</a>
+        <a href="{% url 'signup' %}">Create account</a>
+      </nav>
+    {% endif %}
+  </header>
+
+  <div id="flash" class="flash-region" role="status" aria-live="polite">
+    {% if messages %}
+      {% for message in messages %}
+        <p class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</p>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  <main id="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="shell-footer">
+    <span>Task Manager</span>
+    <a href="/api/v1/openapi.json">API</a>
+    <a href="{% url 'status_page' %}">Status</a>
+    <a href="{% url 'terms' %}">Terms</a>
+    <a href="{% url 'privacy' %}">Privacy</a>
+  </footer>
+</body>
+</html>

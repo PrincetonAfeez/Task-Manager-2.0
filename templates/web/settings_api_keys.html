@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}API keys · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>API keys</h1></section>
+
+{% if new_token %}
+  <section class="panel highlight">
+    <h2>Copy this key now</h2>
+    <p>This is the only time the full key is shown. It is stored hashed and cannot be recovered.</p>
+    <code class="token">{{ new_token }}</code>
+  </section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-heading"><h2>Active keys</h2></div>
+  <table class="data-table">
+    <thead><tr><th scope="col">Name</th><th scope="col">Prefix</th><th scope="col">Role</th><th scope="col">Last used</th><th scope="col">Expires</th><th scope="col"></th></tr></thead>
+    <tbody>
+      {% for key in api_keys %}
+        <tr class="{% if not key.is_active %}muted{% endif %}">
+          <td>{{ key.name }}</td>
+          <td><code>{{ key.prefix }}</code></td>
+          <td>{{ key.get_role_display }}</td>
+          <td>{% if key.last_used_at %}{{ key.last_used_at|timesince }} ago{% else %}Never{% endif %}</td>
+          <td>{% if key.expires_at %}{{ key.expires_at|date:"j M Y" }}{% else %}Never{% endif %}</td>
+          <td>
+            {% if key.is_active %}
+              <form method="post" action="{% url 'api_key_revoke' key.id %}" data-confirm="Revoke this key? Anything using it stops working immediately.">
+                {% csrf_token %}
+                <button type="submit" class="button ghost">Revoke</button>
+              </form>
+            {% else %}
+              Revoked
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="empty">No API keys yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Create a key</h2></div>
+  <form method="post" class="inline-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create key</button>
+  </form>
+  <p class="hint">Use it as <code>Authorization: Api-Key &lt;token&gt;</code>. A key can never exceed your own role.</p>
+</section>
+{% endblock %}

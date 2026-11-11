@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Create account · Task Manager{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <h1>Create your account</h1>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="flash flash-error">{{ form.non_field_errors }}</div>{% endif %}
+    {{ form.as_p }}
+    <button type="submit">Create account</button>
+  </form>
+  <p class="auth-links">Already have an account? <a href="{% url 'login' %}">Sign in</a></p>
+  <p class="muted small">
+    By creating an account you agree to the <a href="{% url 'terms' %}">Terms of Service</a>
+    and the <a href="{% url 'privacy' %}">Privacy Policy</a>.
+  </p>
+</section>
+{% endblock %}

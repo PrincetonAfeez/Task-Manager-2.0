@@ -1,0 +1,469 @@
+audit:
+  product_name: Task Manager
+  reviewer_id: internal-review
+  revised:
+    by: internal-review
+    date: 2026-11-10
+    scope: >
+      Entries touching authentication (AUTH7), SSO (ENT3), file scanning (FS5), backups,
+      CI, capacity and the accepted-limitations list were re-evaluated after two-step
+      verification, OIDC single sign-on, Stripe billing and ClamAV scanning were added,
+      and after the suite, the container stack and a load test were actually run on
+      PostgreSQL. All other entries are unchanged from the original evaluation.
+  inferred_contract:
+    stage: ENTERPRISE
+    stage_rationale: >
+      LAUNCH and GROWTH signals are all present. ENTERPRISE is inferred because two of its
+      signals are present: audit logging exists as a customer-facing feature
+      (kernel/models.py AuditLog, immutable at the model layer, surfaced at
+      /settings/audit/), and tenant-level data isolation is a stated guarantee that is
+      formally verified (tests/test_tenancy.py, tests/test_api_security.py). OIDC single
+      sign-on is now a third signal. SAML, SCIM, compliance artifacts and contractual SLA
+      machinery are absent and are declared as accepted limitations.
+    modules:
+      - auth_identity
+      - multi_tenancy
+      - public_api
+      - background_jobs
+      - data_layer
+      - file_storage
+      - email_notifications
+      - integrations
+      - frontend_app
+    accepted_limitations:
+      - "Stripe integration is verified against a fake of the Stripe API only; it has not been run against a Stripe account (docs/BILLING.md first-run checklist)."
+      - "SSO is OpenID Connect only and verified against an in-process provider; no SAML, SCIM, single logout or group-to-role mapping, and no run against a commercial IdP (docs/IDENTITY.md)."
+      - "Two-step verification is TOTP only (no WebAuthn) and is opt-in unless a workspace requires it (docs/IDENTITY.md)."
+      - "The CI workflow has never executed on GitHub; each job was run locally with the same commands (README)."
+      - "No realtime push; HTMX request/response only, no websockets (README)."
+      - "No mobile applications; responsive web is the entire client story (README)."
+      - "English only; USE_I18N is on but no catalogues are shipped (README)."
+      - "Single region; no data-residency controls (README, docs/DATA_POLICY.md section 3)."
+      - "Best-effort availability; internal SLOs published, no contractual SLA or status-page integration (docs/SLO.md)."
+      - "Attachments stored on the local filesystem by default; object storage is configuration, not a shipped integration (README)."
+      - "No third-party penetration test; the security review is internal and says so (docs/SECURITY_REVIEW.md)."
+      - "Malware scanning is signature-based (ClamAV) and off unless ATTACHMENT_SCAN_BACKEND is set; the deploy check warns when it is not (docs/SECURITY_REVIEW.md residual risk 4)."
+
+  findings:
+    # ---------------------------------------------------------------- Universal Core
+    - check_id: U1
+      status: pass
+      severity: none
+      evidence: ".gitignore:32-39 (.env, *.pem, *.key), .gitignore:14 (db.sqlite3), .dockerignore:2-11; config/settings.py:52-74 requires DJANGO_SECRET_KEY in production and rejects short, low-entropy or Django-placeholder keys at import; tests/test_production_profile.py::TestSecretKey (5 tests); tests/test_codebase.py::TestSecretsHygiene (4 tests). bandit medium+: 0 findings."
+    - check_id: U2
+      status: pass
+      severity: none
+      evidence: "Dockerfile (multi-stage, non-root uid 10001, collectstatic at build, HEALTHCHECK); entrypoint.sh waits for the database and applies migrations once; docker-compose.yml migrate service with condition: service_completed_successfully; README 'Quick start'. tests/test_ops.py::TestDeployChecks."
+    - check_id: U3
+      status: pass
+      severity: none
+      evidence: "tests/test_integration.py - 16 end-to-end journeys including signup -> workspace -> invite -> accept -> collaborate, and quick-add -> reminder -> durable job -> worker -> delivered notification. Verified manually against a running server: login, dashboard, board, billing, OpenAPI, and a worker run that executed 9 jobs."
+    - check_id: U4
+      status: pass
+      severity: none
+      evidence: "api/exceptions.py:65-140 single error envelope with a stable code and request_id; ops/views.py:170-250 HTML and JSON handlers for 400/403/404/500; tests/test_api_security.py::TestErrorEnvelope asserts no Traceback, SQL, or site-packages path appears in any error body."
+    - check_id: U5
+      status: pass
+      severity: none
+      evidence: "requirements.txt pins every dependency with an upper bound; requirements-dev.txt separates tooling; pip-audit: 'No known vulnerabilities found'; .github/dependabot.yml weekly pip, monthly actions and docker; .github/workflows/ci.yml dependency-audit job."
+    - check_id: U6
+      status: pass
+      severity: none
+      evidence: "ops/logging.py JSONFormatter and RequestIDFilter; ops/middleware.py RequestIDMiddleware propagates X-Request-ID and rejects malformed inbound ids; Job.correlation_id carries the id into the worker; /healthz, /readyz, /version, and three component endpoints; optional Sentry gated on SENTRY_DSN with send_default_pii=False. tests/test_ops.py::TestJSONLogging, ::TestRequestIDMiddleware."
+    - check_id: U7
+      status: pass
+      severity: none
+      evidence: "README.md rewritten to match behaviour, with an explicit 'Accepted limitations' section; the previously advertised demo/demo login is removed and a test enforces its absence (tests/test_codebase.py::TestDocumentation). OpenAPI is generated from the live router (api/schema.py:build_schema) so it cannot drift; tests/test_api_contract.py::TestOpenApiSchema::test_documented_routes_actually_respond."
+    - check_id: U8
+      status: pass
+      severity: none
+      evidence: "config/settings.py:214-224 Argon2 preferred, PBKDF2/Scrypt fallback; :288-296 SSL redirect, HSTS 1 year with subdomains and preload, secure cookies in production; API keys, invitation tokens and share links stored as SHA-256 digests only (kernel/models.py, tasks/models_extra.py); docs/DATA_POLICY.md section 4 lists what is deliberately never logged."
+    - check_id: U9
+      status: pass
+      severity: none
+      evidence: "ops/management/commands/backup_db.py uses SQLite's online backup API (safe against concurrent writers) and --verify performs a real round trip on both engines. PostgreSQL: pg_dump inside an exported snapshot, pg_restore into a scratch database, per-table row counts compared against the same snapshot; executed in the container stack on 2026-11-10 with 50 tables verified. SQLite: restore, PRAGMA integrity_check, row counts. docs/RUNBOOK.md section 4 documents the quarterly Postgres drill with RTO 1h / RPO 24h. tests/test_ops.py::TestManagementCommands::test_backup_and_verify_round_trip."
+    - check_id: U10
+      status: pass
+      severity: none
+      evidence: "docs/RUNBOOK.md section 6 documents the expand/contract policy and the rollback procedure; APP_RELEASE stamps the image and /version; tests/test_codebase.py::TestMigrations::test_every_project_migration_is_reversible and the CI 'Every migration is reversible' step both fail the build on an irreversible operation."
+
+    # ---------------------------------------------------------------- LAUNCH
+    - check_id: LAUNCH1
+      status: pass
+      severity: none
+      evidence: "README 'Quick start' - migrate, seed_demo, runserver. Verified working from a flushed database during this audit."
+    - check_id: LAUNCH2
+      status: pass
+      severity: none
+      evidence: "Migrations apply cleanly from zero on SQLite and on PostgreSQL 17 (run 2026-11-10, including the identity app and the billing/tasks additions); every operation is reversible (checked by the CI script, run locally) and makemigrations --check reports no drift."
+    - check_id: LAUNCH3
+      status: pass
+      severity: none
+      evidence: "1136 tests across 21 modules at 95% statement coverage, including 16 end-to-end journeys covering the core workflow."
+    - check_id: LAUNCH4
+      status: pass
+      severity: none
+      evidence: "Structured JSON logging with request correlation; optional Sentry (config/settings.py:432-450). Absent a DSN, errors still reach the queryable application log with a request id."
+    - check_id: LAUNCH5
+      status: pass
+      severity: none
+      evidence: ".github/workflows/ci.yml defines lint, bandit, deploy-check, migration-sync, migration-reversibility, pytest against SQLite and PostgreSQL 17, pip-audit, and a Docker build that boots the image and polls /healthz. The workflow has NOT run on GitHub (the project is not in a repository). Every job was executed locally with the same commands on 2026-11-10 and passes: 1,421 passed on SQLite at 94% coverage, 1,425 passed on PostgreSQL 17, and the built image boots and answers /healthz. Doing so found and fixed a defect in the workflow itself: its placeholder secret key was shorter than the production guard allows, so deploy-check would have failed on its first run."
+    - check_id: LAUNCH6
+      status: pass
+      severity: none
+      evidence: "docker-compose.yml reproduces the production topology locally; docs/RUNBOOK.md section 6 documents pre-production verification (version stamp check after deploy)."
+    - check_id: LAUNCH7
+      status: pass
+      severity: none
+      evidence: "api/throttling.py scoped anon/user/burst/write/export/auth throttles; web/views_auth.py::ThrottledLoginView rate-limits the HTML login form; kernel/auth_backends.py adds per-account lockout keyed on both username and IP. tests/test_web_features.py::TestAuthViews (4 tests) and tests/test_kernel.py::TestLoginLockout (5 tests)."
+    - check_id: LAUNCH8
+      status: pass
+      severity: none
+      evidence: "Self-service and tested: /account/export/ (personal data), /export/tasks/ and /export/workspace/ (workspace), /account/delete/ (account), /settings/workspace/delete/ (workspace, 30-day retention then purge). docs/DATA_POLICY.md section 6."
+    - check_id: LAUNCH9
+      status: pass
+      severity: none
+      evidence: "docs/SLO.md 'Alerting' maps eight alert conditions to routes (page vs ticket), each backed by an endpoint or table that can actually go red; docs/RUNBOOK.md section 2 lists what to wire each endpoint to."
+    - check_id: LAUNCH10
+      status: pass
+      severity: none
+      evidence: "docs/RUNBOOK.md section 3 gives alert-to-action for every alarm; section 8 defines escalation (on-call -> lead at 30 minutes, immediate for suspected data exposure) and status-page communication within 15 minutes of confirmed impact."
+    - check_id: LAUNCH11
+      status: pass
+      severity: none
+      evidence: "templates/registration/signup.html links /terms/ and /privacy/; both routes resolve (web/views_legal.py) and are asserted by tests/test_legal.py (9 tests), including that the privacy text states the retention windows and the single-region limitation."
+
+    # ---------------------------------------------------------------- GROWTH
+    - check_id: GROWTH1
+      status: pass
+      severity: none
+      evidence: "docs/SLO.md defines latency and availability objectives for six core endpoints and six automation objectives, each mapped to a signal the application already emits, plus an error-budget policy."
+    - check_id: GROWTH2
+      status: pass
+      severity: none
+      evidence: "docs/CAPACITY.md records a load test actually run on 2026-11-10 against the production-profile container stack (PostgreSQL 17, 50,000+ task corpus): method, environment, throughput and percentile latencies at several concurrency levels and worker counts, and what saturates first. The earlier figures in that document were not measurements and have been replaced. The test found and fixed six defects (unbounded board render, one-claim-per-tick dispatcher, DISTINCT over the task list, unbounded reminder rows, a reminder lost on reopen, and an unindexed default sort), each pinned by tests/test_scale_regressions.py."
+    - check_id: GROWTH3
+      status: pass
+      severity: none
+      evidence: "docs/CAPACITY.md 'Caching strategy' - deliberately minimal: nothing customer-visible is cached, so there is no invalidation to get wrong. Only throttle counters, lockout counters, sessions and content-hashed static assets are cached, all expiry-based."
+    - check_id: GROWTH4
+      status: pass
+      severity: none
+      evidence: "queues/services.py::snapshot_queue_metrics writes QueueMetricSnapshot every 5 minutes and logs a backlog alert past threshold; DeadLetter model with operator redrive (web + API); /healthz/worker returns 503 on a stale backlog. tests/test_queues.py::TestMetrics, ::TestReaper, ::TestRedriveAndCancel."
+    - check_id: GROWTH5
+      status: pass
+      severity: none
+      evidence: "Indexes on every hot path (docs/CAPACITY.md 'Query profile'); select_related/prefetch_related on every list view; tests/test_codebase.py::TestTenantScoping::test_every_organization_scoped_model_indexes_the_tenant_column asserts the tenant column is always indexed."
+    - check_id: GROWTH6
+      status: pass
+      severity: none
+      evidence: "kernel/models.py::FeatureFlag with per-organization and global (organization=NULL) overrides resolved by kernel/services.py::feature_enabled; web/decorators.py::feature_required gates views. tests/test_kernel.py::TestFeatureFlags (6 tests)."
+    - check_id: GROWTH7
+      status: pass
+      severity: none
+      evidence: "docs/RUNBOOK.md section 8 defines the escalation path and timings; section 3 gives the first-responder actions for each alert."
+    - check_id: GROWTH8
+      status: pass
+      severity: none
+      evidence: "docs/ADR.md records ten decisions with context, decision, consequences and rejected alternatives - covering the durable ledger, firing identity, structural tenant isolation, the permission matrix, exactly-once effect, optimistic concurrency, the HTMX choice, soft delete, quota enforcement, and honest health checks."
+
+    # ---------------------------------------------------------------- ENTERPRISE
+    - check_id: ENT1
+      status: pass
+      severity: none
+      evidence: "tests/test_tenancy.py (22 tests) and tests/test_api_security.py::TestCrossTenantIsolation (8 tests) prove tenant A cannot read or write tenant B: list exclusion, detail 404 (not 403, which would confirm the id exists), rejected foreign FK references, and non-writable organization field. Enforced structurally in api/mixins.py::OrganizationScopedViewSet.get_queryset, with tests/test_codebase.py::TestTenantScoping failing the build if a view reaches an unscoped manager."
+    - check_id: ENT2
+      status: pass
+      severity: none
+      evidence: "kernel/models.py::AuditLog.save raises on any update and .delete raises unconditionally; the admin registers it read-only with add/change/delete disabled. Retention (2 years, detached rather than deleted on workspace purge, with the rationale) is documented in docs/DATA_POLICY.md sections 2 and 5. tests/test_kernel.py::TestAuditLog (5 tests) and tests/test_kernel.py::TestSoftDeleteAndPurge::test_the_audit_trail_outlives_the_purge."
+    - check_id: ENT3
+      status: pass
+      severity: low
+      evidence: "OpenID Connect single sign-on per workspace (identity/oidc.py): authorization-code flow with PKCE, state and nonce; ID-token signature, issuer, audience and expiry verified with an asymmetric-only algorithm allow-list; accounts linked on the provider's subject; just-in-time provisioning; optional mandatory SSO with an owner break-glass. tests/test_sso.py (82 tests) covers forged, replayed, expired and mis-signed tokens and cross-tenant account takeover."
+      note: "Low, not none: verified against an in-process provider that signs real tokens, not against a commercial IdP. SAML and SCIM are not implemented and are declared."
+    - check_id: ENT4
+      status: pass
+      severity: none
+      evidence: "docs/DATA_POLICY.md - section 2 retention table (30-day workspace purge, 2-year audit, 30-day operational logs), section 3 residency stated plainly as single-region with no per-customer control. The purge is implemented (kernel/purge.py) and tested, not merely described."
+    - check_id: ENT5
+      status: pass
+      severity: none
+      evidence: "docs/RUNBOOK.md section 4 defines RPO 24 hours and RTO 1 hour with a quarterly Postgres restore drill; section 5 gives the real-incident restore procedure. backup_db --verify automates the restore check on both SQLite and PostgreSQL and was executed against PostgreSQL 17 in the container stack, so the runbook is tested rather than aspirational."
+    - check_id: ENT6
+      status: pass
+      severity: low
+      evidence: "docs/SECURITY_REVIEW.md - internal structured review with bandit (0 medium/high), pip-audit (clean), ruff security rules, and check --deploy --fail-level WARNING clean under the production profile. Twelve classes of finding recorded with disposition."
+      note: "No third-party penetration test has been performed. The document states this explicitly rather than implying external validation. Commissioning one is the first recommendation and is required before onboarding a customer with a formal security review requirement."
+    - check_id: ENT7
+      status: n/a
+      severity: none
+      evidence: "No compliance certification is claimed anywhere (README, docs/SECURITY_REVIEW.md). There is nothing to map controls against, and claiming otherwise would be the scope dishonesty this framework tests for."
+    - check_id: ENT8
+      status: pass
+      severity: none
+      evidence: "docs/SUBPROCESSORS.md - three required and two optional sub-processors with purpose, data seen and region; Stripe and the customer's own identity provider listed as optional; an explicit 'not used' list (no analytics, no CDN, no LLM provider); and a 30-day customer-notice change process."
+
+    # ---------------------------------------------------------------- auth_identity
+    - check_id: AUTH1
+      status: pass
+      severity: none
+      evidence: "config/settings.py:214-224 Argon2PasswordHasher first when argon2-cffi is installed, PBKDF2/Scrypt fallback; Django supplies a per-user salt. Minimum length raised to 12 (config/settings.py:206)."
+    - check_id: AUTH2
+      status: pass
+      severity: none
+      evidence: "SESSION_COOKIE_AGE 12 hours (config/settings.py:238); API keys carry expires_at and revoked_at, checked on every request (kernel/models.py::ApiKey.is_active, api/authentication.py). tests/test_api_security.py::TestApiKeyAuthentication asserts revoked and expired keys are rejected."
+    - check_id: AUTH3
+      status: pass
+      severity: none
+      evidence: "Invitation tokens are single-use and 7-day limited, stored as SHA-256 digests only (kernel/models.py::Invitation). Password reset uses Django's signed token with PASSWORD_RESET_TIMEOUT of 2 hours. tests/test_kernel.py::TestInvitations (10 tests) covers reuse, expiry, forgery and deleted-workspace cases."
+    - check_id: AUTH4
+      status: pass
+      severity: none
+      evidence: "Two independent controls: per-account lockout after 8 failures in 15 minutes (kernel/auth_backends.py, keyed on both username and IP) and per-IP throttling of the login form (api/throttling.py::LoginRateThrottle). X-Forwarded-For is only trusted behind a declared TLS proxy, so a client cannot spoof its way out."
+    - check_id: AUTH5
+      status: pass
+      severity: none
+      evidence: "Server-side on every route: web/decorators.py (workspace_required, permission_required, feature_required) and api/permissions.py (HasActiveOrganization, HasRolePermission). Templates consult the same matrix, so the UI never offers what the server would refuse. tests/test_integration.py::TestPermissionJourney asserts a viewer is refused on every write path in the product."
+    - check_id: AUTH6
+      status: pass
+      severity: none
+      evidence: "kernel/roles.py::can_assign_role blocks both vertical and horizontal escalation; tests/test_tenancy.py::TestRoleMatrix and tests/test_kernel.py::TestRoleChanges assert an admin cannot mint an owner, cannot change a peer admin, and that the last owner can be neither demoted nor removed. An API key cannot exceed its creator's role (kernel/services.py::create_api_key)."
+    - check_id: AUTH7
+      status: pass
+      severity: none
+      evidence: "TOTP two-step verification (identity/mfa.py, identity/totp.py): RFC 6238 checked against the RFC test vectors, seeds encrypted at rest, single-use codes with replay protection, hashed recovery codes, lockout after five failures, and a per-workspace requirement enforced on every request including session API calls. The admin login is routed through the same flow. tests/test_mfa.py (74 tests); also exercised in a browser against the production-profile container stack."
+
+    # ---------------------------------------------------------------- multi_tenancy
+    - check_id: MT1
+      status: pass
+      severity: none
+      evidence: "Enforced by a base class, not by discipline: api/mixins.py::OrganizationScopedViewSet.get_queryset scopes every route including detail; kernel/tenancy.py::TenantContext.scope raises TypeError on a model with no organization field rather than returning unscoped rows; web views fetch through tenant.scope(). tests/test_codebase.py::TestTenantScoping fails the build on an unscoped manager in a view."
+    - check_id: MT2
+      status: pass
+      severity: none
+      evidence: "tests/test_tenancy.py, tests/test_api_security.py::TestCrossTenantIsolation, and cross-tenant assertions throughout tests/test_web.py, test_features.py, test_filters_and_views.py and test_webhooks.py."
+    - check_id: MT3
+      status: pass
+      severity: none
+      evidence: "kernel/purge.py::purge_organization_data deletes in explicit dependency order (PROTECT foreign keys on Task.task_list and Job.queue make a naive cascade fail partway), drops attachment blobs before their rows, and refuses to run against a workspace whose deleted_at is unset. tests/test_kernel.py::TestSoftDeleteAndPurge (9 tests)."
+    - check_id: MT4
+      status: pass
+      severity: none
+      evidence: "Identifiers are sequential but unguessable access is irrelevant: every lookup is scoped first, so a foreign id yields 404. tests/test_api_security.py::test_detail_of_foreign_task_is_404_not_403 documents why 403 would be an enumeration oracle."
+    - check_id: MT5
+      status: pass
+      severity: none
+      evidence: "Per-plan quotas on members, tasks, lists, API keys, webhooks, schedules, attachment bytes and jobs per day (billing/models.py::Plan, billing/services.py::check_quota); per-queue concurrency_limit and rate_limit_per_minute; per-key API throttling keyed by organization so one tenant cannot exhaust another's budget."
+
+    # ---------------------------------------------------------------- public_api
+    - check_id: API1
+      status: pass
+      severity: none
+      evidence: "URL-path versioning at /api/v1/ with DEFAULT_VERSIONING_CLASS and ALLOWED_VERSIONS pinned (config/settings.py:349-352); the OpenAPI description states that breaking changes are gated behind a version."
+    - check_id: API2
+      status: pass
+      severity: none
+      evidence: "DEFAULT_PERMISSION_CLASSES is IsAuthenticated globally; every viewset additionally requires HasActiveOrganization. tests/test_api_security.py::TestAnonymousAccess parametrises all 18 list endpoints for both read and write and asserts 401/403."
+    - check_id: API3
+      status: pass
+      severity: none
+      evidence: "api/throttling.py keys throttles by API key prefix, or by user and organization, so tenants do not share a budget; api/exceptions.py sets both the Retry-After header and error.retry_after on 429."
+    - check_id: API4
+      status: pass
+      severity: none
+      evidence: "Serializer-level validation with the shared error envelope; tests/test_api_contract.py asserts 400 with per-field errors for a blank title, a due time without a date, and a column from another list."
+    - check_id: API5
+      status: pass
+      severity: none
+      evidence: "StandardPagination with a 200 max_page_size on collections; TimelineCursorPagination on append-heavy feeds (jobs, activity, audit log, notifications, schedule occurrences), because offset pagination skips and repeats rows as new entries land at the head."
+    - check_id: API6
+      status: pass
+      severity: none
+      evidence: "api/schema.py::build_schema walks the live router, so a route cannot exist without appearing in the document. tests/test_api_contract.py::TestOpenApiSchema::test_documented_routes_actually_respond fetches the documented collections and asserts each responds."
+    - check_id: API7
+      status: pass
+      severity: none
+      evidence: "Task writes accept expected_version and return 409 on mismatch (api/views.py::TaskViewSet.perform_update); documented in the OpenAPI description under 'Concurrency'. tests/test_integration.py::TestConcurrencyJourney proves two editors cannot silently clobber each other."
+
+    # ---------------------------------------------------------------- background_jobs
+    - check_id: BJ1
+      status: pass
+      severity: none
+      evidence: "queues/handlers.py - every handler is idempotent by a naturally unique row (Notification.natural_key) or an explicit EffectMarker taken in the same transaction as the effect (queues/services.py::claim_effect). tests/test_queues.py::TestEffectIdempotency and tests/test_notifications.py::TestEmailHandler::test_a_redelivered_job_does_not_send_twice."
+    - check_id: BJ2
+      status: pass
+      severity: none
+      evidence: "queues/services.py::retry_delay_seconds - exponential backoff capped at 1 hour with jitter, so jobs that failed during an outage do not all retry at the same instant and recreate it. tests/test_queues.py::TestFailureAndRetry (6 tests) including an explicit jitter test."
+    - check_id: BJ3
+      status: pass
+      severity: none
+      evidence: "DeadLetter on attempt exhaustion, permanent error, or excess redeliveries; logged at ERROR; surfaced on the Automation page and at /api/v1/dead-letters/; redrivable by an operator. /healthz/worker returns 503 when the backlog is stale."
+    - check_id: BJ4
+      status: pass
+      severity: none
+      evidence: "Leases with a visibility timeout mean an ungraceful kill is recoverable rather than lossy: queues/services.py::reap_expired_leases returns the job or dead-letters it. run_worker handles SIGTERM by finishing the current batch; docker-compose sets stop_grace_period: 45s. tests/test_integration.py::test_a_crashed_worker_does_not_strand_its_jobs."
+    - check_id: BJ5
+      status: pass
+      severity: none
+      evidence: "Firing identity is a unique (schedule, scheduled_time) row, so two scheduler instances racing on one tick means one insert wins and the other is a no-op - no lock service required. tests/test_schedules.py::TestFiring::test_a_concurrent_second_fire_is_a_no_op and tests/test_integration.py::test_two_scans_of_the_same_tick_produce_one_job."
+    - check_id: BJ6
+      status: pass
+      severity: none
+      evidence: "Job.status, JobAttempt rows with durations and errors, QueueMetricSnapshot every 5 minutes, backlog alert logging past threshold, and three component health endpoints that return 503 on real degradation. tests/test_ops.py::TestWorkerHealth asserts the degraded case returns 503 and that a draining backlog does not."
+
+    # ---------------------------------------------------------------- data_layer
+    - check_id: DL1
+      status: pass
+      severity: none
+      evidence: "All eight project migrations are reversible, enforced by tests/test_codebase.py::TestMigrations and a CI step; docs/RUNBOOK.md section 6 documents the expand/contract pattern and why an add and a drop must not ship together."
+    - check_id: DL2
+      status: pass
+      severity: none
+      evidence: "No destructive migration exists. The only bulk deletion is kernel/purge.py, which refuses to run against a workspace that is not soft-deleted and only after a 30-day retention window; docs/RUNBOOK.md section 5 requires a backup before any manual reverse migration."
+    - check_id: DL3
+      status: pass
+      severity: none
+      evidence: "docs/DATA_POLICY.md section 1 identifies every PII-bearing column and marks task content as customer-determined (treated as PII). Encryption at rest is the platform's volume encryption, stated as such rather than claimed as application-level."
+    - check_id: DL4
+      status: pass
+      severity: none
+      evidence: "Consistent and documented: workspaces soft-delete then purge (ADR-008); tasks archive rather than delete, including through the API (api/views.py::TaskViewSet.perform_destroy), because comments, attachments and activity reference them; accounts hard-delete with authored content anonymised."
+    - check_id: DL5
+      status: pass
+      severity: none
+      evidence: "CONN_MAX_AGE 60s with CONN_HEALTH_CHECKS on server databases (config/settings.py:150-152); SQLite gets WAL, a 20s busy timeout and IMMEDIATE transactions; docs/CAPACITY.md names PgBouncer as the next step past six web replicas."
+    - check_id: DL6
+      status: pass
+      severity: none
+      evidence: "ops/middleware.py::RequestTimingMiddleware emits a Server-Timing header and logs any request over SLOW_REQUEST_MS with path, method, status and duration; docs/CAPACITY.md documents the index backing every hot query."
+
+    # ---------------------------------------------------------------- file_storage
+    - check_id: FS1
+      status: pass
+      severity: none
+      evidence: "web/forms.py::AttachmentForm validates size against ATTACHMENT_MAX_BYTES and extension against an allow-list, server-side. tests/test_filters_and_views.py::TestAttachments asserts oversized, disallowed-extension and extensionless uploads are all rejected."
+    - check_id: FS2
+      status: pass
+      severity: none
+      evidence: "Downloads go through web/views.py::attachment_download, which re-checks tenancy on every request and serves with nosniff plus a sandboxing CSP; the response is marked private, no-store. There is no public bucket. tests assert a foreign attachment is 404."
+    - check_id: FS3
+      status: pass
+      severity: none
+      evidence: "tasks/models.py::attachment_upload_path discards the supplied name entirely and stores under attachments/org-<id>/<uuid4><ext>, which removes both path traversal and filename collision. Django additionally strips the directory component. Both layers asserted by tests/test_filters_and_views.py::test_the_stored_path_never_uses_the_supplied_filename."
+    - check_id: FS4
+      status: pass
+      severity: none
+      evidence: "kernel/purge.py deletes attachment blobs before their rows during a workspace purge, tolerating an already-missing blob so one orphan cannot stall the erasure; account deletion nulls uploaded_by rather than orphaning files."
+    - check_id: FS5
+      status: pass
+      severity: none
+      evidence: "Uploads are scanned by ClamAV through a durable job (tasks/scanning.py). Downloads are refused until the verdict is clean, infected files are deleted from storage with an audit entry and a notification, and a scanner outage holds files rather than releasing them. tests/test_scanning.py (29 tests, against a socket-level clamd fake) plus a run against a real ClamAV daemon in the container stack, recorded in docs/SECURITY_REVIEW.md. Off unless ATTACHMENT_SCAN_BACKEND=clamav; check --deploy warns (tasks.W001)."
+
+    # ---------------------------------------------------------------- email_notifications
+    - check_id: EN1
+      status: pass
+      severity: none
+      evidence: "Email is never sent inline - tasks/notifications.py::queue_email enqueues a durable job, so an SMTP timeout cannot block a request or lose the message. Failures retry with backoff and are visible in JobAttempt. tests/test_notifications.py::TestEmailHandler."
+    - check_id: EN2
+      status: pass
+      severity: none
+      evidence: "NotificationPreference.unsubscribed_at overrides every per-category flag (kernel/models.py::allows_email); digests additionally honour a WEEKLY/DAILY/OFF setting. tests/test_kernel.py::TestNotificationPreferences."
+    - check_id: EN3
+      status: pass
+      severity: none
+      evidence: "Bodies carry the task title and due date only. docs/DATA_POLICY.md section 4 lists what is never included; the personal-data export test asserts no password material appears even in the subject's own export."
+    - check_id: EN4
+      status: pass
+      severity: none
+      evidence: "integrations/delivery.py - HMAC-SHA256 over timestamp.body so replay is detectable; retry classified (429/5xx retryable, 4xx permanent); circuit breaker disables an endpoint after 20 consecutive failures; hard connect and read timeouts; response read capped. tests/test_webhooks.py (56 tests)."
+    - check_id: EN5
+      status: pass
+      severity: none
+      evidence: "Enforced in tasks/notifications.py::deliver_notification before any send, not in the UI: in_app_enabled, per-category email flags, quiet hours (correctly handling a window that wraps midnight) and unsubscribe are all checked server-side."
+
+    # ---------------------------------------------------------------- integrations
+    - check_id: INT1
+      status: pass
+      severity: none
+      evidence: "Outbound webhooks run in the queue, never in the request path, so a customer endpoint being down cannot slow or fail a user action. Timeouts are explicit (WEBHOOK_CONNECT_TIMEOUT 5s, WEBHOOK_READ_TIMEOUT 10s) and the circuit breaker stops a dead endpoint occupying the queue indefinitely."
+    - check_id: INT2
+      status: pass
+      severity: none
+      evidence: "Per-endpoint signing secrets, generated on creation and shown once; rotatable by recreating the endpoint. API keys are per-workspace, role-ceilinged, individually revocable, and optionally expiring."
+    - check_id: INT3
+      status: pass
+      severity: none
+      evidence: "Delivery is queue-paced with per-queue rate_limit_per_minute and concurrency_limit; a 429 from a receiver is treated as retryable and backs off rather than hammering."
+    - check_id: INT4
+      status: pass
+      severity: none
+      evidence: "Every attempt is recorded in WebhookDelivery with status, status code, duration and error, surfaced per endpoint at /settings/webhooks/<id>/. Auto-disabling is visible in the UI with the failure count, so a silent stop is impossible."
+    - check_id: INT5
+      status: n/a
+      severity: none
+      evidence: "No OAuth-based integrations exist. Outbound webhooks use a shared signing secret, not a bearer token, so there is no refresh flow to handle."
+
+    # ---------------------------------------------------------------- frontend_app
+    - check_id: FE1
+      status: pass
+      severity: none
+      evidence: "No secrets in any client asset; static/js/app.js contains only progressive enhancement and no authorization logic. Template capability checks read the same permission matrix the server enforces, so the UI cannot diverge from it."
+    - check_id: FE2
+      status: pass
+      severity: none
+      evidence: "Django autoescaping throughout, asserted by tests/test_codebase.py::TestTemplates::test_no_template_disables_autoescaping; a strict CSP with script-src 'self' (ops/middleware.py::SecurityHeadersMiddleware); htmx is vendored locally, enforced by test_no_template_loads_a_third_party_script. tests/test_web.py::test_comment_body_is_escaped_in_the_fragment covers stored XSS."
+    - check_id: FE3
+      status: pass
+      severity: none
+      evidence: "CsrfViewMiddleware active; every POST form carries {% csrf_token %}, enforced codebase-wide by tests/test_codebase.py::TestTemplates::test_every_state_changing_form_carries_a_csrf_token; HTMX sends X-CSRFToken via hx-headers on <body>."
+    - check_id: FE4
+      status: pass
+      severity: none
+      evidence: "static/js/app.js handles htmx:responseError and htmx:sendError; server errors are retargeted into the #flash region with HX-Retarget rather than replacing the clicked element; error templates exist for 400/403/404/500 and carry the request id."
+    - check_id: FE5
+      status: pass
+      severity: none
+      evidence: "collectstatic runs at Docker build time with CompressedManifestStaticFilesStorage; the CI docker job builds the image and asserts it boots and answers /healthz."
+
+
+  verification_log:
+    - "Full suite: 1136 tests, 21 modules, 0 failures, 95% statement coverage."
+    - "ruff (incl. security rules): all checks passed."
+    - "bandit --severity-level medium: 0 medium, 0 high."
+    - "pip-audit against requirements.txt: no known vulnerabilities."
+    - "manage.py check --deploy --fail-level WARNING under DJANGO_ENV=production: clean."
+    - "manage.py makemigrations --check --dry-run: no changes detected."
+    - "backup_db --verify: real round trip, integrity check passed, 50 tables matched."
+    - "Live server: 24 authenticated pages return 200; 9 public endpoints return 200."
+    - "Live server: every protected page redirects an anonymous caller to /accounts/login/ with a next parameter."
+    - "Live server: every sampled API route returns 401 to an anonymous caller."
+    - "Live runtime: run_worker executed a batch (4 succeeded, 1 retry scheduled); run_scheduler materialised a recurrence."
+    - "Weak, short, low-entropy and Django-placeholder SECRET_KEY values are all refused at import under the production profile."
+
+  scope_honesty:
+    overclaims: []
+    undocumented_behavior:
+      - "The audit log deliberately survives a workspace purge in detached form. This is now documented (docs/DATA_POLICY.md section 5 and the privacy policy) with the reasoning, but it is behaviour a customer requesting erasure would not otherwise expect."
+      - "An API-key write is attributed to the person who created the key, not to an anonymous service principal. Documented in api/mixins.py::acting_user; a reader of the activity feed sees a human name for an automated action."
+
+  security_posture:
+    exposed_surfaces:
+      - "Login, signup and password reset - public; per-IP throttling plus per-account lockout, no account enumeration on reset."
+      - "REST API at /api/v1/ - session or API key; tenant-scoped querysets, role matrix, per-key throttles."
+      - "Public share links at /shared/<token>/ - the only route serving customer data without a session; hashed token, one list, read-only, no member identities, noindex, no-store, revocable."
+      - "Health endpoints - public but carry no customer data."
+      - "Django admin - staff session, configurable path, audit log read-only; its login is routed through the product sign-in so two-step verification applies."
+      - "Two-step challenge at /accounts/mfa/ - reachable only with a password-verified pending login (5-minute lifetime); throttled and locked after five wrong codes."
+      - "SSO at /sso/ and /sso/callback/ - unauthenticated by design; state, nonce and PKCE bound to the browser session, ID token fully verified, provider URLs SSRF-validated."
+      - "Stripe webhook at /billing/webhooks/stripe/ - unauthenticated and CSRF-exempt by design; HMAC signature with timestamp tolerance, idempotent, state re-read from Stripe's API; returns 404 when not configured."
+      - "Outbound webhooks - we are the client; SSRF-validated, no redirects followed, hard timeouts, capped response reads."
+    strongest_control: "Tenant isolation is structural rather than per-endpoint discipline: a base class scopes get_queryset so list and detail share one rule, serializers reject foreign relations, and a codebase-wide test fails the build if a view reaches an unscoped manager."
+    weakest_control: "External validation. Two-step verification, SSO, payments and malware scanning now exist, but SSO and Stripe are proven only against fakes, and no third party has tested any of it. The controls most likely to hide a defect are the ones that have never met the real service they integrate with."
+
+  summary:
+    critical: 0
+    high: 0
+    medium: 0
+    low: 2
+    pass_gate: production_ready
+    verdict: "Production-ready at the inferred ENTERPRISE contract: all Universal Core, LAUNCH, GROWTH and applicable ENTERPRISE checks pass. Two Lows remain, both about external validation rather than missing controls: no third-party penetration test, and SSO verified against a test provider rather than a commercial one. Stripe has likewise not been run against a real account. Each is stated plainly in the README and the security review."

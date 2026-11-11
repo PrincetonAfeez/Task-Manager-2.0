@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Status — Task Manager</title>
+  <style>
+    :root { color-scheme: light dark; --ok: #1a7f37; --bad: #b42318; --muted: #666; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; max-width: 40rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .overall { font-weight: 600; margin-bottom: 1.5rem; }
+    .overall.ok { color: var(--ok); }
+    .overall.bad { color: var(--bad); }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { border-top: 1px solid #ddd; padding: 0.85rem 0; display: flex; justify-content: space-between; gap: 1rem; }
+    .name { font-weight: 500; }
+    .pill { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; }
+    .pill.ok { color: var(--ok); }
+    .pill.bad { color: var(--bad); }
+    .note { margin-top: 2rem; font-size: 0.85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Task Manager status</h1>
+  <p class="meta">{{ payload.environment }} · {{ payload.release }} · {{ payload.updated_at }}</p>
+  <p class="overall {% if payload.status == 'operational' %}ok{% else %}bad{% endif %}">
+    {{ payload.status }}
+  </p>
+  <ul>
+    {% for c in payload.components %}
+    <li>
+      <span class="name">{{ c.name }}</span>
+      <span class="pill {% if c.status == 'operational' %}ok{% else %}bad{% endif %}">{{ c.status }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="note">{{ payload.note }}</p>
+</body>
+</html>

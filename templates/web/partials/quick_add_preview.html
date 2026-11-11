@@ -1,0 +1,11 @@
+{% if parsed.original %}
+  <div class="preview-pill">
+    <strong>{{ parsed.title }}</strong>
+    {% if parsed.due_date %}<span>{{ parsed.due_date }}</span>{% endif %}
+    {% if parsed.due_time %}<span>{{ parsed.due_time|time:"g:i A" }}</span>{% endif %}
+    <span>P{{ parsed.priority }}</span>
+    {% for label in parsed.labels %}<span>#{{ label }}</span>{% endfor %}
+    {% for mention in parsed.mentions %}<span>@{{ mention }}</span>{% endfor %}
+    {% if parsed.recurrence %}<span>repeats {{ parsed.recurrence }}</span>{% endif %}
+  </div>
+{% endif %}

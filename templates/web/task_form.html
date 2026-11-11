@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{% if task %}Edit task{% else %}New task{% endif %} · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>{% if task %}Edit task{% else %}New task{% endif %}</h1>
+</section>
+
+<form method="post" class="stacked-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="flash flash-error">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {{ form.as_p }}
+  <div class="form-actions">
+    <button type="submit">{% if task %}Save changes{% else %}Create task{% endif %}</button>
+    <a class="button ghost" href="{% if task %}{% url 'task_detail' task.id %}{% else %}{% url 'task_list' %}{% endif %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

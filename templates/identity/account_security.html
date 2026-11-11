@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Account security · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Account security</h1></section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Two-step verification</h2></div>
+  {% if required_by %}
+    <p class="flash flash-warning">
+      Required by {% for org in required_by %}<strong>{{ org.name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}.
+    </p>
+  {% endif %}
+
+  {% if has_mfa %}
+    <p>
+      <strong>On.</strong>
+      {% if has_totp %}You can sign in with an authenticator app{% if passkeys %} or a passkey{% endif %}.{% elif passkeys %}You can sign in with a passkey.{% endif %}
+      {% if has_totp %}{{ recovery_codes_remaining }} recovery code{{ recovery_codes_remaining|pluralize }} unused.{% endif %}
+    </p>
+
+    {% if has_totp %}
+    <h3>Generate new recovery codes</h3>
+    <form method="post" action="{% url 'mfa_recovery_codes' %}" class="stacked-form">
+      {% csrf_token %}
+      {% if has_password %}
+        <label for="rc-password">Password</label>
+        <input id="rc-password" type="password" name="password" autocomplete="current-password" required>
+      {% endif %}
+      <label for="rc-code">Authenticator code</label>
+      <input id="rc-code" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="32">
+      <button type="submit" class="button ghost">Replace recovery codes</button>
+    </form>
+
+    <h3>Turn off</h3>
+    <form method="post" action="{% url 'mfa_disable' %}" class="stacked-form" data-confirm="Turn off two-step verification?">
+      {% csrf_token %}
+      {% if has_password %}
+        <label for="off-password">Password</label>
+        <input id="off-password" type="password" name="password" autocomplete="current-password" required>
+      {% endif %}
+      <label for="off-code">Authenticator or recovery code</label>
+      <input id="off-code" name="code" autocomplete="one-time-code" required maxlength="32">
+      <button type="submit" class="button danger">Turn off two-step verification</button>
+    </form>
+    {% endif %}
+  {% else %}
+    <p>
+      <strong>Off.</strong> Add a second step so a stolen password is not enough to get into
+      your account.
+    </p>
+    <form method="post" action="{% url 'mfa_start' %}">
+      {% csrf_token %}
+      <button type="submit" class="button">Set up two-step verification</button>
+    </form>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Passkeys</h2></div>
+  <p>Passkeys use your device's biometrics or screen lock and can satisfy two-step verification at sign-in.</p>
+
+  {% if passkeys %}
+    <ul class="passkey-list">
+      {% for key in passkeys %}
+        <li>
+          <strong>{{ key.label }}</strong>
+          <span class="meta">Added {{ key.created_at|date:"M j, Y" }}</span>
+          <form method="post" action="{% url 'webauthn_delete' key.pk %}" class="inline-form" data-confirm="Remove this passkey?">
+            {% csrf_token %}
+            <button type="submit" class="link-button">Remove</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No passkeys registered yet.</p>
+  {% endif %}
+
+  <h3>Add a passkey</h3>
+  <p id="passkey-register-error" class="flash flash-error" role="alert" hidden></p>
+  <div class="stacked-form">
+    <label for="passkey-label">Label</label>
+    <input id="passkey-label" type="text" maxlength="255" placeholder="e.g. This laptop" autocomplete="off">
+    <button type="button" class="button" id="passkey-register-btn" data-begin="{% url 'webauthn_register_begin' %}" data-finish="{% url 'webauthn_register_finish' %}">
+      Register passkey
+    </button>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Single sign-on</h2></div>
+  {% for identity in sso_identities %}
+    <p>Linked to <strong>{{ identity.connection.organization.name }}</strong> as {{ identity.email }}.</p>
+  {% empty %}
+    <p>No single sign-on identities are linked to this account.</p>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Password</h2></div>
+  {% if has_password %}
+    <a class="button ghost" href="{% url 'password_change' %}">Change password</a>
+  {% else %}
+    <p>This account signs in through single sign-on and has no password.</p>
+  {% endif %}
+</section>
+
+<script src="{% static 'js/webauthn.js' %}"></script>
+<script>
+  (function () {
+    var btn = document.getElementById("passkey-register-btn");
+    var err = document.getElementById("passkey-register-error");
+    var labelInput = document.getElementById("passkey-label");
+    if (!btn || !window.TaskManagerWebAuthn) return;
+    btn.addEventListener("click", function () {
+      err.hidden = true;
+      btn.disabled = true;
+      var label = (labelInput && labelInput.value) || "Passkey";
+      window.TaskManagerWebAuthn.runCeremony(btn.dataset.begin, btn.dataset.finish, { label: label })
+        .then(function () {
+          window.location.reload();
+        })
+        .catch(function (e) {
+          err.textContent = e.message || "Could not register passkey.";
+          err.hidden = false;
+          btn.disabled = false;
+        });
+    });
+  })();
+</script>
+{% endblock %}

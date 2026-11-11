@@ -1,0 +1,43 @@
+# Ruff configuration.
+target-version = "py313"
+line-length = 110
+extend-exclude = [
+    "*/migrations/*",
+    "staticfiles",
+    ".venv",
+    "Older Scope",
+]
+
+[lint]
+select = [
+    "E",      # pycodestyle
+    "F",      # pyflakes
+    "I",      # import sorting
+    "B",      # bugbear
+    "C4",     # comprehensions
+    "DJ",     # Django-specific
+    "S",      # bandit-style security rules
+    "UP",     # pyupgrade
+    "RUF",
+]
+ignore = [
+    "E501",   # line length is handled by the formatter
+    "S101",   # assert is the point of a test suite
+    "B008",   # Django idiom: callables in field defaults
+    "RUF012", # Django class attributes are legitimately mutable
+]
+
+[lint.per-file-ignores]
+# Test fixtures legitimately carry literal passwords and unpack values they do not use.
+"tests/*" = ["S105", "S106", "S311", "S603", "F841", "B007", "RUF015", "RUF059"]
+"conftest.py" = ["E402", "S105", "S106"]
+"config/settings.py" = ["S105"]
+"queues/services.py" = ["S311"]   # jitter is not a cryptographic use of random
+# pg_dump/pg_restore are invoked with a fixed argument list and no shell.
+# S608: SQLite cannot bind an identifier; the table name is regex-validated against an
+# allow-list and comes from sqlite_master, never from a request.
+"ops/management/commands/backup_db.py" = ["S404", "S603", "S608"]
+"ops/management/commands/restore_db.py" = ["S404", "S603"]
+
+[lint.isort]
+known-first-party = ["api", "config", "exports", "kernel", "ops", "queues", "schedules", "support", "tasks", "web"]

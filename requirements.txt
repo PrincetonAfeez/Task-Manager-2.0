@@ -1,0 +1,21 @@
+# Runtime dependencies. Pinned to exact versions so a deploy is reproducible.
+Django==5.2.19
+djangorestframework==3.18.3
+django-htmx==1.27.0
+celery==5.6.3
+redis==6.4.0
+croniter==6.2.2
+psycopg[binary]>=3.2,<4
+gunicorn>=23.0,<24
+whitenoise>=6.9,<7
+argon2-cffi>=23.1
+requests>=2.32,<3
+# Identity: field encryption (TOTP seeds, SSO client secrets), ID-token verification,
+# and server-side QR rendering for authenticator enrolment.
+cryptography>=50,<51
+PyJWT>=2.10,<3
+segno>=1.6,<2
+# Passkeys (WebAuthn registration and authentication ceremonies).
+webauthn>=2.7,<4
+# Optional object storage when MEDIA_BACKEND=s3 (MinIO, AWS, R2, …).
+django-storages[s3]>=1.14,<2

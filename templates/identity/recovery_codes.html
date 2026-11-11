@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Recovery codes · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Recovery codes</h1></section>
+<section class="panel">
+  {% if just_enabled %}<p class="flash flash-success">Two-step verification is on.</p>{% endif %}
+  <p>
+    <strong>Save these now. They are shown only once.</strong> Each code works a single time
+    and lets you sign in if you lose your authenticator. Any earlier codes no longer work.
+  </p>
+  <ul class="recovery-codes">
+    {% for code in codes %}<li><code>{{ code }}</code></li>{% endfor %}
+  </ul>
+  <a class="button" href="{% url 'account_security' %}">I have saved them</a>
+</section>
+{% endblock %}

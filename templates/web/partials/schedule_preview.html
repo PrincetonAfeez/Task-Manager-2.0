@@ -1,0 +1,10 @@
+{% if schedule.last_error %}
+  <p class="flash flash-error">{{ schedule.last_error }}</p>
+{% endif %}
+<ol class="schedule-runs">
+  {% for run in runs %}
+    <li>{{ run|date:"D j M Y, H:i" }} UTC</li>
+  {% empty %}
+    <li class="empty">No upcoming runs. Check the expression.</li>
+  {% endfor %}
+</ol>

@@ -1,0 +1,10 @@
+{% for task in lane.cards %}{% include "web/partials/board_card.html" %}{% endfor %}
+{% if lane.remaining %}
+  <button type="button"
+          class="button ghost board-more"
+          hx-get="{% url 'board_lane' task_list.id %}?column={{ lane.column.id|default:'' }}&amp;offset={{ lane.next_offset }}"
+          hx-target="this"
+          hx-swap="outerHTML">
+    Show more ({{ lane.remaining }} remaining)
+  </button>
+{% endif %}

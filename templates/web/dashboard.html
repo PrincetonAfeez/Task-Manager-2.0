@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Today · Task Manager{% endblock %}
+{% block content %}
+<section class="workspace-hero">
+  <div>
+    <p class="eyebrow">{{ organization.name }}</p>
+    <h1>Today</h1>
+    <p class="muted">{{ today|date:"l, j F Y" }}</p>
+  </div>
+  <div class="metric-strip" aria-label="Task totals">
+    <a href="{% url 'task_list' %}?status=open"><strong>{{ counts.open|default:0 }}</strong><span>Open</span></a>
+    <a href="{% url 'task_list' %}?due=today"><strong>{{ counts.today|default:0 }}</strong><span>Today</span></a>
+    <a href="{% url 'task_list' %}?due=overdue" class="{% if counts.overdue %}is-alert{% endif %}"><strong>{{ counts.overdue|default:0 }}</strong><span>Overdue</span></a>
+    <a href="{% url 'task_list' %}?status=completed"><strong>{{ counts.completed|default:0 }}</strong><span>Done</span></a>
+  </div>
+</section>
+
+{% if "task.create" in can %}
+<section class="quick-add-band" aria-labelledby="quick-add-heading">
+  <h2 id="quick-add-heading">Quick Add</h2>
+  <form class="quick-add" action="{% url 'quick_add_create' %}" method="post">
+    {% csrf_token %}
+    <label class="sr-only" for="quick-add-input">Task</label>
+    <input
+      id="quick-add-input"
+      name="quick_add"
+      placeholder="Ship release notes tomorrow 5pm #ops !3"
+      hx-post="{% url 'quick_add_preview' %}"
+      hx-trigger="keyup changed delay:250ms"
+      hx-target="#quick-add-preview"
+      autocomplete="off"
+      maxlength="2000"
+      required
+    >
+    <button type="submit">Add</button>
+  </form>
+  <div id="quick-add-preview" class="preview-slot" aria-live="polite"></div>
+  <p class="hint">
+    Use <code>tomorrow</code>, <code>friday</code>, <code>5pm</code>, <code>#label</code>,
+    <code>@person</code>, <code>!1</code>–<code>!4</code> for priority, and <code>weekly</code> to repeat.
+  </p>
+</section>
+{% endif %}
+
+<section class="content-grid">
+  <div class="main-column">
+    <section id="tasks" class="panel">
+      <div class="panel-heading">
+        <h2>Tasks</h2>
+        <span>{% if task_list %}{{ task_list.name }} · {% endif %}<a href="{% url 'task_list' %}">See all</a></span>
+      </div>
+      <div class="task-list">
+        {% for task in tasks %}
+          {% include "web/partials/task_row.html" %}
+        {% empty %}
+          <p class="empty">No tasks yet. Add one above to get started.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    {% if "automation.view" in can %}
+    <section id="automation" class="panel">
+      <div class="panel-heading">
+        <h2>Automation</h2>
+        <span>
+          {{ jobs|length }} recent job{{ jobs|length|pluralize }}
+          {% if dead_letter_count %}· <a href="{% url 'automation' %}" class="is-alert">{{ dead_letter_count }} dead letter{{ dead_letter_count|pluralize }}</a>{% endif %}
+        </span>
+      </div>
+      <table class="data-table">
+        <caption class="sr-only">Recent background jobs</caption>
+        <thead><tr><th scope="col">Handler</th><th scope="col">Status</th><th scope="col">Source</th><th scope="col">Queue</th></tr></thead>
+        <tbody>
+          {% for job in jobs %}
+            <tr>
+              <td>{{ job.handler }}</td>
+              <td><mark class="status status-{{ job.status }}">{{ job.get_status_display }}</mark></td>
+              <td>{{ job.source }}</td>
+              <td>{{ job.queue.name }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="empty">No jobs yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="side-column">
+    {% if "automation.view" in can %}
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Queues</h2></div>
+      {% for queue in queues %}
+        <div class="list-line">
+          <span>{{ queue.name }}{% if queue.paused %} <em>(paused)</em>{% endif %}</span>
+          <strong>{{ queue.job_count }}</strong>
+        </div>
+      {% empty %}
+        <p class="empty">No queues.</p>
+      {% endfor %}
+    </section>
+
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Schedules</h2></div>
+      {% for schedule in schedules %}
+        <details>
+          <summary>{{ schedule.name }}{% if not schedule.active %} <em>(inactive)</em>{% endif %}</summary>
+          <div
+            hx-get="{% url 'schedule_preview' schedule.id %}"
+            hx-trigger="toggle from:closest details once"
+            hx-swap="innerHTML"
+          >Loading…</div>
+        </details>
+      {% empty %}
+        <p class="empty">No schedules.</p>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <section class="panel compact">
+      <div class="panel-heading">
+        <h2>Notifications</h2>
+        <a href="{% url 'notification_list' %}">All</a>
+      </div>
+      {% for notification in notifications %}
+        <div class="mini-item">
+          <strong>{{ notification.title }}</strong>
+          <span>{{ notification.get_status_display }} · {{ notification.created_at|timesince }} ago</span>
+        </div>
+      {% empty %}
+        <p class="empty">Nothing new.</p>
+      {% endfor %}
+    </section>
+
+    <section id="activity" class="panel compact">
+      <div class="panel-heading"><h2>Activity</h2></div>
+      {% for item in activities %}
+        <div class="mini-item">
+          <strong>{{ item.summary }}</strong>
+          <span>{% if item.actor %}{{ item.actor.get_username }} · {% endif %}{{ item.created_at|timesince }} ago</span>
+        </div>
+      {% empty %}
+        <p class="empty">No activity yet.</p>
+      {% endfor %}
+    </section>
+  </aside>
+</section>
+{% endblock %}

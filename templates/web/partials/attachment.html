@@ -1,0 +1,12 @@
+<li class="attachment" id="attachment-{{ attachment.id }}">
+  {% if attachment.scan_status == "infected" %}
+    <span class="line-through">{{ attachment.original_name }}</span>
+    <mark class="status status-dead">Removed: malware detected</mark>
+  {% elif attachment.is_downloadable %}
+    <a href="{% url 'attachment_download' attachment.id %}">{{ attachment.original_name }}</a>
+  {% else %}
+    <span>{{ attachment.original_name }}</span>
+    <span class="muted">Scanning for malware...</span>
+  {% endif %}
+  <span class="muted">{{ attachment.size_bytes|filesizeformat }}{% if attachment.uploaded_by %} · {{ attachment.uploaded_by.get_username }}{% endif %}</span>
+</li>

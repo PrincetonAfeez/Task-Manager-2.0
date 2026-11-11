@@ -1,0 +1,33 @@
+# Never bake the developer database (it holds real password hashes) into an image.
+db.sqlite3
+db.sqlite3-*
+.backup/
+
+.git/
+.github/
+.gitignore
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+staticfiles/
+media/
+exports/*.csv
+exports/*.json
+
+docs/
+tests/
+conftest.py
+pytest.ini
+*.md
+!README.md
+Older Scope/

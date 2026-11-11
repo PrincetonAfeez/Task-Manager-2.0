@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Plan and usage · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ active_organization.name }}</p>
+    <h1>Plan and usage</h1>
+  </div>
+  <div>
+    <strong>{{ plan.name }}</strong>
+    <span class="muted">{{ plan.price_display }}</span>
+    {% if trial_days_remaining is not None %}
+      <p class="muted small">Trial ends in {{ trial_days_remaining }} day{{ trial_days_remaining|pluralize }}.</p>
+    {% endif %}
+    {% if subscription.status == "past_due" %}
+      <p class="flash flash-warning">Your last payment failed. Update your payment method to keep this plan.</p>
+    {% endif %}
+    {% if has_paid_subscription and subscription.cancel_at_period_end and subscription.current_period_end %}
+      <p class="muted small">Cancels on {{ subscription.current_period_end|date:"j M Y" }}.</p>
+    {% elif has_paid_subscription and subscription.current_period_end %}
+      <p class="muted small">Renews on {{ subscription.current_period_end|date:"j M Y" }}.</p>
+    {% endif %}
+    {% if can_manage and has_paid_subscription %}
+      <form method="post" action="{% url 'billing_portal' %}">
+        {% csrf_token %}
+        <button type="submit" class="button ghost">Manage payment, invoices and cancellation</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Usage</h2></div>
+  <table class="data-table">
+    <thead><tr><th scope="col">Resource</th><th scope="col">Used</th><th scope="col">Limit</th><th scope="col">Status</th></tr></thead>
+    <tbody>
+      {% for name, row in usage.items %}
+        <tr>
+          <td>{{ name|cut:"_"|title }}</td>
+          <td>{{ row.used }}</td>
+          <td>{% if row.unlimited %}Unlimited{% else %}{{ row.limit }}{% endif %}</td>
+          <td>
+            {% if row.unlimited %}
+              <span class="muted">-</span>
+            {% elif row.exceeded %}
+              <mark class="status status-dead">At limit</mark>
+            {% else %}
+              {{ row.percent }}%
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Plans</h2></div>
+  <div class="content-grid">
+    {% for option in plans %}
+      <div class="panel compact {% if option.id == plan.id %}highlight{% endif %}">
+        <h3>{{ option.name }}</h3>
+        <p><strong>{{ option.price_display }}</strong></p>
+        <p class="muted small">{{ option.description }}</p>
+        <ul class="small">
+          <li>{% if option.max_members %}{{ option.max_members }} members{% else %}Unlimited members{% endif %}</li>
+          <li>{% if option.max_tasks %}{{ option.max_tasks }} tasks{% else %}Unlimited tasks{% endif %}</li>
+          <li>{% if option.max_webhooks %}{{ option.max_webhooks }} webhooks{% else %}Unlimited webhooks{% endif %}</li>
+        </ul>
+        {% if can_manage and option.id != plan.id %}
+          {% if has_paid_subscription %}
+            <p class="muted small">Change plans from the billing portal above.</p>
+          {% elif option.monthly_price_cents and payments_enabled and option.code not in purchasable %}
+            <p class="muted small">Contact us for this plan.</p>
+          {% elif option.monthly_price_cents and not payments_enabled and not self_serve_changes %}
+            <p class="muted small">Contact us to upgrade.</p>
+          {% else %}
+            <form method="post" action="{% url 'billing_change_plan' %}">
+              {% csrf_token %}
+              <input type="hidden" name="plan" value="{{ option.code }}">
+              <button type="submit">{% if option.monthly_price_cents and payments_enabled %}Subscribe to{% else %}Switch to{% endif %} {{ option.name }}</button>
+            </form>
+          {% endif %}
+        {% elif option.id == plan.id %}
+          <p class="muted small">Current plan</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  {% if not can_manage %}
+    <p class="hint">Only the workspace owner can change the plan.</p>
+  {% endif %}
+</section>
+{% endblock %}

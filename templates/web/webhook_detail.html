@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ endpoint.name }} · Webhooks{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Webhook</p>
+    <h1>{{ endpoint.name }}</h1>
+    <p class="muted">{{ endpoint.url }}</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{% url 'webhook_test' endpoint.id %}">
+      {% csrf_token %}
+      <button type="submit" class="button ghost">Send test delivery</button>
+    </form>
+    <form method="post" action="{% url 'webhook_delete' endpoint.id %}" data-confirm="Delete this endpoint? Deliveries stop immediately.">
+      {% csrf_token %}
+      <button type="submit" class="button danger">Delete</button>
+    </form>
+  </div>
+</section>
+
+<div class="content-grid">
+  <div class="main-column">
+    <section class="panel">
+      <div class="panel-heading"><h2>Deliveries</h2></div>
+      <table class="data-table">
+        <thead><tr><th scope="col">Event</th><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Attempt</th><th scope="col">Duration</th><th scope="col">When</th></tr></thead>
+        <tbody>
+          {% for delivery in deliveries %}
+            <tr>
+              <td><code>{{ delivery.event }}</code></td>
+              <td><mark class="status status-{{ delivery.status }}">{{ delivery.get_status_display }}</mark></td>
+              <td>{{ delivery.status_code|default:"-" }}</td>
+              <td>{{ delivery.attempt }}</td>
+              <td>{% if delivery.duration_ms %}{{ delivery.duration_ms }}ms{% else %}-{% endif %}</td>
+              <td>{{ delivery.created_at|timesince }} ago</td>
+            </tr>
+            {% if delivery.error %}
+              <tr><td colspan="6" class="muted small">{{ delivery.error|truncatechars:300 }}</td></tr>
+            {% endif %}
+          {% empty %}
+            <tr><td colspan="6" class="empty">No deliveries yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if page.has_other_pages %}
+        <nav class="pagination" aria-label="Pagination">
+          {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
+          <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+          {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next</a>{% endif %}
+        </nav>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="side-column">
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Health</h2></div>
+      <div class="list-line"><span>State</span><strong>{% if endpoint.disabled_at %}Auto-disabled{% elif endpoint.active %}Active{% else %}Paused{% endif %}</strong></div>
+      <div class="list-line"><span>Consecutive failures</span><strong>{{ endpoint.consecutive_failures }}</strong></div>
+      <div class="list-line"><span>Last success</span><strong>{% if endpoint.last_success_at %}{{ endpoint.last_success_at|timesince }} ago{% else %}Never{% endif %}</strong></div>
+      <div class="list-line"><span>Last failure</span><strong>{% if endpoint.last_failure_at %}{{ endpoint.last_failure_at|timesince }} ago{% else %}Never{% endif %}</strong></div>
+      <p class="hint">An endpoint is auto-disabled after {{ endpoint.FAILURE_THRESHOLD }} consecutive failures. Re-enable it from the webhooks list once the receiver is fixed.</p>
+    </section>
+
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Verifying signatures</h2></div>
+      <p class="small">Each request carries:</p>
+      <pre class="token">X-TaskManager-Signature: t=&lt;unix&gt;,v1=&lt;hmac&gt;</pre>
+      <p class="small">
+        Compute <code>HMAC-SHA256(secret, "&lt;t&gt;.&lt;raw body&gt;")</code> and compare it in
+        constant time. Reject anything where <code>t</code> is more than five minutes old to
+        prevent replay.
+      </p>
+    </section>
+  </aside>
+</div>
+{% endblock %}

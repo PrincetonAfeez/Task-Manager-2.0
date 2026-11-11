@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Automation · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Automation</h1></section>
+
+<div class="content-grid">
+  <div class="main-column">
+    <section class="panel">
+      <div class="panel-heading"><h2>Queues</h2></div>
+      <table class="data-table">
+        <thead><tr><th scope="col">Queue</th><th scope="col">Waiting</th><th scope="col">In flight</th><th scope="col">Limit</th><th scope="col">State</th></tr></thead>
+        <tbody>
+          {% for queue in queues %}
+            <tr>
+              <td>{{ queue.name }}</td>
+              <td>{{ queue.waiting }}</td>
+              <td>{{ queue.in_flight_count }}</td>
+              <td>{{ queue.concurrency_limit }}</td>
+              <td>
+                {% if "automation.manage" in can %}
+                  <form method="post" action="{% url 'queue_toggle_pause' queue.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button ghost">{% if queue.paused %}Resume{% else %}Pause{% endif %}</button>
+                  </form>
+                {% else %}
+                  {% if queue.paused %}Paused{% else %}Running{% endif %}
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="empty">No queues.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Dead letters</h2>
+        <span>{{ dead_letters|length }} awaiting action</span>
+      </div>
+      <table class="data-table">
+        <thead><tr><th scope="col">Job</th><th scope="col">Handler</th><th scope="col">Reason</th><th scope="col">When</th><th scope="col"></th></tr></thead>
+        <tbody>
+          {% for item in dead_letters %}
+            <tr>
+              <td>{{ item.job_id }}</td>
+              <td>{{ item.job.handler }}</td>
+              <td class="truncate">{{ item.reason|truncatechars:120 }}</td>
+              <td>{{ item.created_at|timesince }} ago</td>
+              <td>
+                {% if "job.redrive" in can %}
+                  <form method="post" action="{% url 'dead_letter_redrive' item.id %}" data-confirm="Return this job to its queue?">
+                    {% csrf_token %}
+                    <button type="submit" class="button ghost">Redrive</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="empty">No dead letters. Nothing has exhausted its retries.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><h2>Recent jobs</h2></div>
+      <table class="data-table">
+        <thead><tr><th scope="col">ID</th><th scope="col">Handler</th><th scope="col">Status</th><th scope="col">Attempts</th><th scope="col">Available</th></tr></thead>
+        <tbody>
+          {% for job in jobs %}
+            <tr>
+              <td>{{ job.id }}</td>
+              <td>{{ job.handler }}</td>
+              <td><mark class="status status-{{ job.status }}">{{ job.get_status_display }}</mark></td>
+              <td>{{ job.attempts_made }} / {{ job.max_attempts }}</td>
+              <td>{{ job.available_at|date:"j M H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="empty">No jobs.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <aside class="side-column">
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Schedules</h2></div>
+      {% for schedule in schedules %}
+        <details>
+          <summary>{{ schedule.name }}{% if not schedule.active %} <em>(inactive)</em>{% endif %}</summary>
+          <p class="muted">{{ schedule.get_expression_type_display }}: <code>{{ schedule.expression }}</code> ({{ schedule.timezone }})</p>
+          <div hx-get="{% url 'schedule_preview' schedule.id %}" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">Loading...</div>
+        </details>
+      {% empty %}
+        <p class="empty">No schedules.</p>
+      {% endfor %}
+
+      {% if "automation.manage" in can %}
+        <details>
+          <summary>New schedule</summary>
+          <form method="post" action="{% url 'schedule_create' %}" class="inline-form">
+            {% csrf_token %}
+            {{ schedule_form.as_p }}
+            <button type="submit">Create schedule</button>
+          </form>
+        </details>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

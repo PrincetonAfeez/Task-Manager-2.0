@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Board · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Board</h1>
+    <nav class="list-tabs" aria-label="Task lists">
+      {% for item in lists %}
+        <a href="{% url 'board_list' item.id %}" class="{% if item.id == task_list.id %}is-active{% endif %}">{{ item.name }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+</section>
+
+<div class="board" data-board>
+  {% for lane in lanes %}
+    <section class="board-column" data-column-id="{{ lane.column.id }}" aria-label="{{ lane.column.name }}">
+      <header class="board-column-head">
+        <h2>{{ lane.column.name }}</h2>
+        <span>{{ lane.total }}{% if lane.column.wip_limit %} / {{ lane.column.wip_limit }}{% endif %}</span>
+      </header>
+      <div class="board-column-body">
+        {% if lane.total %}
+          {% include "web/partials/board_lane_cards.html" %}
+        {% else %}
+          <p class="empty">Empty</p>
+        {% endif %}
+      </div>
+    </section>
+  {% empty %}
+    <p class="empty">This list has no columns.</p>
+  {% endfor %}
+
+  {% if unassigned.total %}
+    <section class="board-column" aria-label="Unassigned">
+      <header class="board-column-head"><h2>No column</h2><span>{{ unassigned.total }}</span></header>
+      <div class="board-column-body">
+        {% include "web/partials/board_lane_cards.html" with lane=unassigned %}
+      </div>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

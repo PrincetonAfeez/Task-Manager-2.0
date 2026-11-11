@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Analytics · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Analytics</h1>
+  <form method="get" class="inline-form">
+    <label for="days">Window</label>
+    <select id="days" name="days" onchange="this.form.submit()">
+      <option value="7" {% if days == 7 %}selected{% endif %}>7 days</option>
+      <option value="30" {% if days == 30 %}selected{% endif %}>30 days</option>
+      <option value="90" {% if days == 90 %}selected{% endif %}>90 days</option>
+    </select>
+    <noscript><button type="submit">Apply</button></noscript>
+  </form>
+</section>
+
+<div class="metric-strip wide">
+  <div><strong>{{ report.counts.open }}</strong><span>Open</span></div>
+  <div><strong>{{ report.created_count }}</strong><span>Created</span></div>
+  <div><strong>{{ report.completed_count }}</strong><span>Completed</span></div>
+  <div><strong>{{ report.overdue_ratio }}%</strong><span>Overdue share</span></div>
+  <div><strong>{% if report.avg_cycle_hours %}{{ report.avg_cycle_hours }}h{% else %}-{% endif %}</strong><span>Avg cycle</span></div>
+  <div><strong>{% if report.job_success_rate is not None %}{{ report.job_success_rate }}%{% else %}-{% endif %}</strong><span>Job success</span></div>
+</div>
+
+<div class="content-grid">
+  <div class="main-column">
+    <section class="panel">
+      <div class="panel-heading"><h2>Completion by day</h2></div>
+      <table class="data-table">
+        <thead><tr><th scope="col">Day</th><th scope="col">Completed</th></tr></thead>
+        <tbody>
+          {% for row in report.completion_by_day %}
+            <tr><td>{{ row.day }}</td><td>{{ row.count }}</td></tr>
+          {% empty %}
+            <tr><td colspan="2" class="empty">Nothing completed in this window.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><h2>Open work by list</h2></div>
+      <table class="data-table">
+        <thead><tr><th scope="col">List</th><th scope="col">Open</th><th scope="col">Done</th></tr></thead>
+        <tbody>
+          {% for row in report.by_list %}
+            <tr><td>{{ row.task_list__name }}</td><td>{{ row.open }}</td><td>{{ row.done }}</td></tr>
+          {% empty %}
+            <tr><td colspan="3" class="empty">No data.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <aside class="side-column">
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Open work by assignee</h2></div>
+      {% for row in report.by_assignee %}
+        <div class="list-line">
+          <span>{% if row.assignee__username %}{{ row.assignee__username }}{% else %}Unassigned{% endif %}</span>
+          <strong>{{ row.count }}</strong>
+        </div>
+      {% empty %}
+        <p class="empty">No open work.</p>
+      {% endfor %}
+    </section>
+
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Automation health</h2></div>
+      <div class="list-line"><span>Jobs waiting</span><strong>{{ report.job_stats.waiting }}</strong></div>
+      <div class="list-line"><span>Jobs dead</span><strong>{{ report.job_stats.dead }}</strong></div>
+      <div class="list-line"><span>Open dead letters</span><strong>{{ report.open_dead_letters }}</strong></div>
+      <div class="list-line"><span>Active members</span><strong>{{ report.member_count }}</strong></div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Audit log · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Audit log</h1>
+  <form method="get" class="inline-form">
+    <label class="sr-only" for="action">Action</label>
+    <input id="action" name="action" value="{{ request.GET.action|default:'' }}" placeholder="Filter by action">
+    <button type="submit">Filter</button>
+  </form>
+</section>
+
+<section class="panel">
+  <p class="muted">Entries are append-only and cannot be edited or deleted, including by workspace owners.</p>
+  <table class="data-table">
+    <thead><tr><th scope="col">When</th><th scope="col">Action</th><th scope="col">Actor</th><th scope="col">Target</th><th scope="col">IP</th><th scope="col">Request</th></tr></thead>
+    <tbody>
+      {% for entry in entries %}
+        <tr>
+          <td>{{ entry.created_at|date:"j M Y H:i" }}</td>
+          <td><code>{{ entry.action }}</code></td>
+          <td>{{ entry.actor_label|default:"system" }}</td>
+          <td>{% if entry.target_type %}{{ entry.target_type }} {{ entry.target_id }}{% else %}-{% endif %}</td>
+          <td>{{ entry.ip_address|default:"-" }}</td>
+          <td><code class="muted">{{ entry.request_id|truncatechars:12 }}</code></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="empty">No audit entries.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if page.has_other_pages %}
+  <nav class="pagination" aria-label="Pagination">
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
+    <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next</a>{% endif %}
+  </nav>
+{% endif %}
+{% endblock %}

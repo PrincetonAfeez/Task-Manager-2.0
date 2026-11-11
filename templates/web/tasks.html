@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Tasks · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Tasks</h1>
+  {% if "task.create" in can %}<a class="button" href="{% url 'task_create' %}">New task</a>{% endif %}
+</section>
+
+<form class="filter-bar" method="get" action="{% url 'task_list' %}">
+  {{ form.q }}
+  {{ form.status }}
+  {{ form.due }}
+  {{ form.priority }}
+  {{ form.assignee }}
+  {{ form.task_list }}
+  {{ form.label }}
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <button type="submit">Filter</button>
+  <a class="button ghost" href="{% url 'task_list' %}">Reset</a>
+</form>
+
+{% if saved_views %}
+<nav class="saved-views" aria-label="Saved views">
+  {% for view in saved_views %}
+    <a href="?view={{ view.id }}" class="{% if saved_view.id == view.id %}is-active{% endif %}">
+      {{ view.name }}{% if view.is_shared %} <span title="Shared with the workspace">*</span>{% endif %}
+    </a>
+  {% endfor %}
+</nav>
+{% endif %}
+
+{% include "web/partials/task_table.html" %}
+
+<form class="save-view" method="post" action="{% url 'saved_view_create' %}">
+  {% csrf_token %}
+  <input type="hidden" name="q" value="{{ form.q.value|default:'' }}">
+  <input type="hidden" name="status" value="{{ form.status.value|default:'' }}">
+  <input type="hidden" name="due" value="{{ form.due.value|default:'' }}">
+  <input type="hidden" name="priority" value="{{ form.priority.value|default:'' }}">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <label for="save-view-name">Save these filters as</label>
+  <input id="save-view-name" name="name" maxlength="120" placeholder="My overdue work" required>
+  {% if "saved_view.share" in can %}
+    <label><input type="checkbox" name="is_shared"> Share with workspace</label>
+  {% endif %}
+  <button type="submit">Save view</button>
+</form>
+{% endblock %}

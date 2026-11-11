@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Set up two-step verification · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Set up two-step verification</h1></section>
+<section class="panel">
+  <ol>
+    <li>Scan this code with an authenticator app (1Password, Google Authenticator, Authy, ...).</li>
+    <li>Enter the 6-digit code the app shows to confirm it works.</li>
+  </ol>
+  <div class="qr-code"><img src="{% url 'mfa_qr' %}" width="208" height="208" alt="QR code for your authenticator app"></div>
+  <p>Cannot scan? Enter this key manually: <code>{{ secret_grouped }}</code></p>
+  {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    <label for="mfa-code">Code from your app</label>
+    <input id="mfa-code" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required maxlength="12">
+    <button type="submit">Turn on two-step verification</button>
+  </form>
+  <p><a href="{% url 'account_security' %}">Cancel</a></p>
+</section>
+{% endblock %}

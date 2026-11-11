@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Lists · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Lists, projects and labels</h1></section>
+
+<div class="content-grid">
+  <div class="main-column">
+    <section class="panel">
+      <div class="panel-heading"><h2>Task lists</h2></div>
+      <table class="data-table">
+        <thead><tr><th scope="col">Name</th><th scope="col">Project</th><th scope="col">Tasks</th><th scope="col">Board</th></tr></thead>
+        <tbody>
+          {% for item in lists %}
+            <tr>
+              <td>{{ item.name }}</td>
+              <td>{% if item.project_area %}{{ item.project_area.name }}{% else %}<span class="muted">-</span>{% endif %}</td>
+              <td>{{ item.task_count }}</td>
+              <td><a href="{% url 'board_list' item.id %}">Open</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="empty">No lists yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <form method="post" class="inline-form">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Create list</button>
+      </form>
+    </section>
+  </div>
+
+  <aside class="side-column">
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Labels</h2></div>
+      {% for label in labels %}
+        <div class="list-line"><span class="chip">#{{ label.name }}</span><strong>{{ label.task_count }}</strong></div>
+      {% empty %}
+        <p class="empty">No labels.</p>
+      {% endfor %}
+      {% if "label.manage" in can %}
+        <form method="post" action="{% url 'label_create' %}" class="inline-form">
+          {% csrf_token %}
+          {{ label_form.as_p }}
+          <button type="submit">Add label</button>
+        </form>
+      {% endif %}
+    </section>
+
+    {% if "project.manage" in can %}
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Project areas</h2></div>
+      <form method="post" action="{% url 'project_create' %}" class="inline-form">
+        {% csrf_token %}
+        {{ project_form.as_p }}
+        <button type="submit">Add project area</button>
+      </form>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

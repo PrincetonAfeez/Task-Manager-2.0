@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Your account · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Your account</h1></section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Download your data</h2></div>
+  <p>
+    A machine-readable copy of everything we hold about you, across every workspace you
+    belong to. Other people's content is excluded - it is their data, not yours.
+  </p>
+  <a class="button" href="{% url 'account_export' %}">Download my data (JSON)</a>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Sign-in security</h2></div>
+  <a class="button ghost" href="{% url 'account_security' %}">Two-step verification and password</a>
+</section>
+
+<section class="panel danger-zone">
+  <div class="panel-heading"><h2>Delete your account</h2></div>
+  <p>
+    This is permanent. Tasks and comments you authored stay with the workspace but are
+    anonymised, so your colleagues do not lose their history.
+  </p>
+
+  {% if blocking_workspaces %}
+    <p class="flash flash-warning">
+      You are the only owner of
+      {% for org in blocking_workspaces %}<strong>{{ org.name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}.
+      Transfer ownership first, or tick the box below to delete them too.
+    </p>
+  {% endif %}
+
+  <form method="post" action="{% url 'account_delete' %}" data-confirm="This permanently deletes your account. Continue?">
+    {% csrf_token %}
+    {% if blocking_workspaces %}
+      <label><input type="checkbox" name="delete_workspaces"> Also delete the workspaces I solely own</label>
+    {% endif %}
+    <label for="confirm-username">Type <strong>{{ request.user.get_username }}</strong> to confirm</label>
+    <input id="confirm-username" name="confirm" autocomplete="off" required>
+    <button type="submit" class="button danger">Delete my account</button>
+  </form>
+</section>
+{% endblock %}

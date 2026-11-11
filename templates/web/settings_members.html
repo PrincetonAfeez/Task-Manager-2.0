@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Members · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Members</h1></section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Current members</h2></div>
+  <table class="data-table">
+    <thead><tr><th scope="col">User</th><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Joined</th><th scope="col"></th></tr></thead>
+    <tbody>
+      {% for membership in memberships %}
+        <tr>
+          <td>{{ membership.user.get_username }}</td>
+          <td>{{ membership.user.email|default:"-" }}</td>
+          <td>
+            {% if "member.manage" in can %}
+              <form method="post" action="{% url 'member_role_change' membership.id %}" class="inline-form">
+                {% csrf_token %}
+                <label class="sr-only" for="role-{{ membership.id }}">Role for {{ membership.user.get_username }}</label>
+                <select id="role-{{ membership.id }}" name="role">
+                  {% for value, label in roles %}
+                    <option value="{{ value }}" {% if membership.role == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="button ghost">Update</button>
+              </form>
+            {% else %}
+              {{ membership.get_role_display }}
+            {% endif %}
+          </td>
+          <td>{{ membership.joined_at|date:"j M Y" }}</td>
+          <td>
+            {% if "member.manage" in can %}
+              <form method="post" action="{% url 'member_remove' membership.id %}" data-confirm="Remove this member?">
+                {% csrf_token %}
+                <button type="submit" class="button ghost">Remove</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Invite someone</h2></div>
+  <form method="post" class="inline-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Send invitation</button>
+  </form>
+
+  {% if invitations %}
+    <h3>Pending invitations</h3>
+    <table class="data-table">
+      <thead><tr><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Expires</th></tr></thead>
+      <tbody>
+        {% for invitation in invitations %}
+          <tr><td>{{ invitation.email }}</td><td>{{ invitation.get_role_display }}</td><td>{{ invitation.expires_at|date:"j M Y" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
+{% endblock %}

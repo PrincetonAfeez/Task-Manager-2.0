@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Single sign-on · Task Manager{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <h1>Sign in with SSO</h1>
+  {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    <label for="sso-email">Work email</label>
+    <input id="sso-email" type="email" name="email" autocomplete="email" autofocus required>
+    <button type="submit">Continue</button>
+  </form>
+  <p class="auth-links"><a href="{% url 'login' %}">Sign in with a password</a></p>
+</section>
+{% endblock %}

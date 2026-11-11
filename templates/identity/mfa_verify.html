@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Two-step verification · Task Manager{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <h1>Two-step verification</h1>
+  {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+  {% if not locked %}
+    <p>Enter the 6-digit code from your authenticator app, one of your recovery codes{% if has_passkeys %}, or use a passkey{% endif %}.</p>
+    {% if has_passkeys %}
+      <p>
+        <button type="button" class="button" id="passkey-verify-btn" data-begin="{% url 'webauthn_auth_begin' %}" data-finish="{% url 'webauthn_auth_finish' %}" data-next="{{ next|escape }}">
+          Use a passkey
+        </button>
+      </p>
+      <p id="passkey-verify-error" class="flash flash-error" role="alert" hidden></p>
+    {% endif %}
+    <form method="post" class="stacked-form">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <label for="mfa-code">Code</label>
+      <input id="mfa-code" name="code" inputmode="text" autocomplete="one-time-code" autofocus required maxlength="32">
+      <button type="submit">Verify</button>
+    </form>
+  {% endif %}
+  <p class="auth-links">
+    {% if stepping_up %}
+      <a href="{% url 'account_security' %}">Account security</a>
+    {% else %}
+      <a href="{% url 'login' %}">Use a different account</a>
+    {% endif %}
+  </p>
+</section>
+{% if has_passkeys %}
+<script src="{% static 'js/webauthn.js' %}"></script>
+<script>
+  (function () {
+    var btn = document.getElementById("passkey-verify-btn");
+    var err = document.getElementById("passkey-verify-error");
+    if (!btn || !window.TaskManagerWebAuthn) return;
+    btn.addEventListener("click", function () {
+      err.hidden = true;
+      btn.disabled = true;
+      window.TaskManagerWebAuthn.runCeremony(btn.dataset.begin, btn.dataset.finish, { next: btn.dataset.next || "" })
+        .then(function (data) {
+          if (data.redirect) window.location = data.redirect;
+          else window.location.reload();
+        })
+        .catch(function (e) {
+          err.textContent = e.message || "Passkey verification failed.";
+          err.hidden = false;
+          btn.disabled = false;
+        });
+    });
+  })();
+</script>
+{% endif %}
+{% endblock %}

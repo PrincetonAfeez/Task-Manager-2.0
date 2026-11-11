@@ -1,0 +1,56 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{ task_list.name }} - shared list</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <header class="shell-header">
+    <span class="brand">
+      <span class="brand-mark" aria-hidden="true">TM</span>
+      <span>{{ organization_name }}</span>
+    </span>
+    <span class="workspace-name">Shared list - read only</span>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <div>
+        <p class="eyebrow">Shared list</p>
+        <h1>{{ task_list.name }}</h1>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="task-list">
+        {% for task in tasks %}
+          <article class="task-row{% if task.is_overdue %} is-overdue{% endif %}">
+            <span class="task-check{% if task.status == 'completed' %} is-done{% endif %}" aria-hidden="true"></span>
+            <div class="task-body">
+              <div class="task-title-line">
+                <strong class="{% if task.status == 'completed' %}line-through{% endif %}">{{ task.title }}</strong>
+                {% if task.priority >= 3 %}<span class="priority">P{{ task.priority }}</span>{% endif %}
+              </div>
+              <div class="task-meta">
+                {% if task.due_date %}<span>{{ task.due_date }}</span>{% endif %}
+                {% if task.column %}<span>{{ task.column.name }}</span>{% endif %}
+                {% for label in task.labels.all %}<span class="chip">#{{ label.name }}</span>{% endfor %}
+              </div>
+            </div>
+          </article>
+        {% empty %}
+          <p class="empty">Nothing to show.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <footer class="shell-footer">
+    <span>Shared from Task Manager. This view is read-only.</span>
+  </footer>
+</body>
+</html>

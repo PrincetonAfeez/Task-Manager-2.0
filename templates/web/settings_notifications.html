@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Notification settings · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Notification preferences</h1></section>
+<p class="muted">These apply to {{ active_organization.name }}. Each workspace has its own settings.</p>
+<form method="post" class="stacked-form">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Save preferences</button>
+</form>
+{% endblock %}

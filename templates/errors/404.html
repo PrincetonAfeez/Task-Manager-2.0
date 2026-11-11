@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Not found - Task Manager{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <h1>Not found</h1>
+  <p>{{ message }}</p>
+  {% if request_id %}<p class="muted small">Reference: <code>{{ request_id }}</code></p>{% endif %}
+  <a class="button" href="/">Back to the dashboard</a>
+</section>
+{% endblock %}

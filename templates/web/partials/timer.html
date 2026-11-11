@@ -1,0 +1,23 @@
+<div id="timer-widget" class="timer-widget">
+  {% if entry %}
+    <form method="post" action="{% url 'timer_stop' %}"
+          hx-post="{% url 'timer_stop' %}" hx-target="#timer-widget" hx-swap="outerHTML">
+      {% csrf_token %}
+      <span class="timer-running" aria-live="polite">
+        Timing <strong>{{ entry.task.title|truncatechars:40 }}</strong>
+      </span>
+      <button type="submit" class="button ghost">Stop timer</button>
+    </form>
+  {% else %}
+    {% if stopped %}
+      <p class="muted small">Logged {{ stopped.duration_seconds|floatformat:0 }} seconds.</p>
+    {% endif %}
+    {% if task %}
+      <form method="post" action="{% url 'timer_start' task.id %}"
+            hx-post="{% url 'timer_start' task.id %}" hx-target="#timer-widget" hx-swap="outerHTML">
+        {% csrf_token %}
+        <button type="submit" class="button ghost">Start timer</button>
+      </form>
+    {% endif %}
+  {% endif %}
+</div>

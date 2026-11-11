@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Webhooks · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Webhooks</h1></section>
+
+{% if new_secret %}
+  <section class="panel highlight">
+    <h2>Copy this signing secret now</h2>
+    <p>Use it to verify the <code>X-TaskManager-Signature</code> header. This is the only time it is shown.</p>
+    <code class="token">{{ new_secret }}</code>
+  </section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-heading"><h2>Endpoints</h2></div>
+  <table class="data-table">
+    <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">State</th><th scope="col">Last result</th><th scope="col"></th></tr></thead>
+    <tbody>
+      {% for endpoint in endpoints %}
+        <tr>
+          <td><a href="{% url 'webhook_detail' endpoint.id %}">{{ endpoint.name }}</a></td>
+          <td class="truncate">{{ endpoint.url }}</td>
+          <td>{% if endpoint.events %}{{ endpoint.events|length }} selected{% else %}All{% endif %}</td>
+          <td>
+            {% if endpoint.disabled_at %}
+              <mark class="status status-dead">Auto-disabled</mark>
+            {% elif endpoint.active %}
+              <mark class="status status-succeeded">Active</mark>
+            {% else %}
+              <mark class="status">Paused</mark>
+            {% endif %}
+          </td>
+          <td>
+            {% if endpoint.last_status_code %}HTTP {{ endpoint.last_status_code }}{% else %}-{% endif %}
+            {% if endpoint.consecutive_failures %}<span class="is-alert">({{ endpoint.consecutive_failures }} failures)</span>{% endif %}
+          </td>
+          <td>
+            <form method="post" action="{% url 'webhook_toggle' endpoint.id %}">
+              {% csrf_token %}
+              <button type="submit" class="button ghost">{% if endpoint.active %}Pause{% else %}Enable{% endif %}</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="empty">No webhook endpoints yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Add an endpoint</h2></div>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create endpoint</button>
+  </form>
+  <p class="hint">
+    Endpoints must be public HTTPS URLs. Private, loopback and link-local addresses are
+    rejected to prevent server-side request forgery.
+  </p>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Recent deliveries</h2></div>
+  <table class="data-table">
+    <thead><tr><th scope="col">Event</th><th scope="col">Endpoint</th><th scope="col">Status</th><th scope="col">Code</th><th scope="col">Duration</th><th scope="col">When</th></tr></thead>
+    <tbody>
+      {% for delivery in recent_deliveries %}
+        <tr>
+          <td><code>{{ delivery.event }}</code></td>
+          <td>{{ delivery.endpoint.name }}</td>
+          <td><mark class="status status-{{ delivery.status }}">{{ delivery.get_status_display }}</mark></td>
+          <td>{{ delivery.status_code|default:"-" }}</td>
+          <td>{% if delivery.duration_ms %}{{ delivery.duration_ms }}ms{% else %}-{% endif %}</td>
+          <td>{{ delivery.created_at|timesince }} ago</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="empty">No deliveries yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

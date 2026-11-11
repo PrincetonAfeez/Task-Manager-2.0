@@ -1,0 +1,44 @@
+<article class="task-row{% if task.is_overdue %} is-overdue{% endif %}" id="task-{{ task.id }}" data-task-id="{{ task.id }}">
+  {% if "task.edit" in can %}
+    <form action="{% url 'toggle_task' task.id %}" method="post" class="task-toggle">
+      {% csrf_token %}
+      <input type="hidden" name="expected_version" value="{{ task.version }}">
+      <button
+        type="submit"
+        class="task-check{% if task.status == 'completed' %} is-done{% endif %}"
+        title="{% if task.status == 'completed' %}Reopen{% else %}Complete{% endif %}"
+        aria-label="{% if task.status == 'completed' %}Reopen {{ task.title }}{% else %}Complete {{ task.title }}{% endif %}"
+        hx-post="{% url 'toggle_task' task.id %}"
+        hx-target="#task-{{ task.id }}"
+        hx-swap="outerHTML"
+      ></button>
+    </form>
+  {% else %}
+    <span class="task-check{% if task.status == 'completed' %} is-done{% endif %}" aria-hidden="true"></span>
+  {% endif %}
+
+  <div class="task-body">
+    <div class="task-title-line">
+      <a class="task-title {% if task.status == 'completed' %}line-through{% endif %}" href="{% url 'task_detail' task.id %}">{{ task.title }}</a>
+      {% if task.priority >= 3 %}<span class="priority priority-{{ task.priority }}">P{{ task.priority }}</span>{% endif %}
+    </div>
+    <div class="task-meta">
+      <span>{{ task.task_list.name }}</span>
+      {% if task.due_date %}
+        <span class="{% if task.is_overdue %}is-alert{% endif %}">{{ task.due_date }}{% if task.due_time %} {{ task.due_time|time:"g:i A" }}{% endif %}</span>
+      {% endif %}
+      {% if task.column %}<span>{{ task.column.name }}</span>{% endif %}
+      {% if task.assignee %}<span>@{{ task.assignee.get_username }}</span>{% endif %}
+      {% for label in task.labels.all %}<span class="chip">#{{ label.name }}</span>{% endfor %}
+    </div>
+    {% if task.reminders.all %}
+      <div class="proof-line">
+        {% for reminder in task.reminders.all %}
+          {% if reminder.status == 'armed' %}
+            <span>Reminder {{ reminder.remind_at|date:"j M H:i" }}{% if reminder.job %} · job {{ reminder.job_id }} {{ reminder.job.get_status_display }}{% endif %}</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</article>

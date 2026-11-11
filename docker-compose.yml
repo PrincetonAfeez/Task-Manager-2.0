@@ -1,0 +1,257 @@
+# Local production-shaped stack.
+#
+# Configuration comes from .env (gitignored; copy .env.example). Required secrets use the
+# ${VAR:?message} form so a missing value fails the stack at startup instead of silently
+# falling back to a default that would ship to production.
+
+x-app-env: &app-env
+  DJANGO_ENV: ${DJANGO_ENV:-production}
+  DJANGO_DEBUG: "0"
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,web}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+  SITE_URL: ${SITE_URL:-http://localhost:8000}
+  DB_ENGINE: django.db.backends.postgresql
+  DB_NAME: ${POSTGRES_DB:-task_manager}
+  DB_USER: ${POSTGRES_USER:-task_manager}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_REQUIRE_SSL: "0"
+  REDIS_URL: redis://redis:6379/2
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/1
+  # Terminated at the reverse proxy in front of this stack; without a proxy, leave both 0.
+  BEHIND_TLS_PROXY: ${BEHIND_TLS_PROXY:-0}
+  SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-0}
+  # Secure by default. Set both to 0 only to exercise the stack over plain http on
+  # localhost, where a Secure cookie would never be sent back.
+  SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-1}
+  CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-1}
+  SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS:-31536000}
+  DJANGO_LOG_FORMAT: json
+  # Rate limiting stays on by default; switched off only for capacity measurements.
+  API_THROTTLING_ENABLED: ${API_THROTTLING_ENABLED:-1}
+  # Identity: dedicated key(s) for encrypting TOTP seeds and SSO client secrets.
+  FIELD_ENCRYPTION_KEYS: ${FIELD_ENCRYPTION_KEYS:-}
+  # Payments (optional). All three are needed together; see docs/BILLING.md.
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  STRIPE_PRICE_IDS: ${STRIPE_PRICE_IDS:-}
+  STRIPE_ALLOW_TEST_KEY: ${STRIPE_ALLOW_TEST_KEY:-0}
+  BILLING_ALLOW_UNPAID_PLAN_CHANGES: ${BILLING_ALLOW_UNPAID_PLAN_CHANGES:-0}
+  # Malware scanning of attachments: set to "clamav" and start the `scanning` profile.
+  ATTACHMENT_SCAN_BACKEND: ${ATTACHMENT_SCAN_BACKEND:-}
+  CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+  # Object storage: filesystem (default) or s3 with the `storage` profile (MinIO).
+  MEDIA_BACKEND: ${MEDIA_BACKEND:-filesystem}
+  AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-task-manager}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minio}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minio-secret-change-me}
+  AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-http://minio:9000}
+  AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME:-us-east-1}
+  AWS_S3_FILE_OVERWRITE: "0"
+  AWS_DEFAULT_ACL: private
+  AWS_QUERYSTRING_AUTH: "1"
+  # Optional Postgres RLS (defence in depth). migrate runs enable_rls when this is 1.
+  ENABLE_POSTGRES_RLS: ${ENABLE_POSTGRES_RLS:-1}
+  STAFF_REQUIRE_MFA: ${STAFF_REQUIRE_MFA:-1}
+  APP_RELEASE: ${APP_RELEASE:-dev}
+  # gunicorn worker processes for the web service; about one per available core.
+  WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: task-manager:${APP_RELEASE:-dev}
+  restart: unless-stopped
+  environment: *app-env
+  # Uploaded attachments. Shared by every app service: the web container writes a file and
+  # a worker container reads it back to scan it, and it must outlive both.
+  volumes:
+    - media_data:/app/media
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  stop_grace_period: 45s
+
+services:
+  # One-shot: applies migrations before anything serves traffic, and before any worker can
+  # observe a half-migrated schema. Every app service waits for it to exit successfully.
+  migrate:
+    <<: *app-base
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      RUN_MIGRATIONS: "1"
+      ENABLE_RLS_ON_MIGRATE: ${ENABLE_POSTGRES_RLS:-1}
+    command: ["python", "-c", "print('migrations applied')"]
+    restart: "no"
+
+  web:
+    <<: *app-base
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Claims durable Job rows and executes them. Scaling this service is how throughput grows.
+  dispatcher:
+    <<: *app-base
+    command: ["celery", "-A", "config", "worker", "-Q", "dispatcher", "-l", "INFO", "--concurrency", "4"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # Beat emits the periodic ticks; without it nothing ever triggers the dispatcher.
+  beat:
+    <<: *app-base
+    command: ["celery", "-A", "config", "beat", "-l", "INFO", "--schedule", "/tmp/celerybeat-schedule"]
+    # The image-level HEALTHCHECK probes the web port, which beat does not serve. Beat has
+    # no ping interface; if the process dies the container exits and is restarted.
+    healthcheck:
+      disable: true
+
+  scheduler:
+    <<: *app-base
+    command: ["celery", "-A", "config", "worker", "-Q", "scheduler", "-l", "INFO", "--concurrency", "2"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # Reclaims leases from workers that died, and samples queue depth for alerting.
+  reaper:
+    <<: *app-base
+    command: ["celery", "-A", "config", "worker", "-Q", "reaper", "-l", "INFO", "--concurrency", "1"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-task_manager}
+      POSTGRES_USER: ${POSTGRES_USER:-task_manager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-task_manager} -d ${POSTGRES_DB:-task_manager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Optional malware scanner: `docker compose --profile scanning up -d`, with
+  # ATTACHMENT_SCAN_BACKEND=clamav. First start downloads the signature database (several
+  # hundred MB) and clamd needs roughly 1.5 GB of memory, which is why it is opt-in.
+  clamav:
+    image: clamav/clamav:stable
+    profiles: ["scanning"]
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+  # S3-compatible object storage for attachments.
+  #   MEDIA_BACKEND=s3 docker compose --profile storage up -d
+  # Console: http://localhost:9001 (minio / minio-secret-change-me)
+  minio:
+    image: minio/minio:latest
+    profiles: ["storage"]
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-minio}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-minio-secret-change-me}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio-init:
+    image: minio/mc:latest
+    profiles: ["storage"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minio} $${MINIO_ROOT_PASSWORD:-minio-secret-change-me} &&
+      mc mb --ignore-existing local/$${AWS_STORAGE_BUCKET_NAME:-task-manager} &&
+      echo bucket ready
+      "
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-minio}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-minio-secret-change-me}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-task-manager}
+    restart: "no"
+
+  # Local OpenID Connect IdP for SSO practice (not a commercial IdP sign-off).
+  #   docker compose --profile oidc up -d
+  # Admin: http://localhost:8080  admin / admin
+  # Realm import: deploy/keycloak/task-manager-realm.json
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    profiles: ["oidc"]
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HTTP_PORT: "8080"
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/keycloak:/opt/keycloak/data/import:ro
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
+  clamav_data:
+  minio_data:

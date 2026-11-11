@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Security · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Workspace security</h1></section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Two-step verification</h2></div>
+  <p>
+    When required, members must have two-step verification on their account before they can
+    open this workspace. Sessions that arrive through single sign-on are exempt: the
+    identity provider is responsible for their second factor.
+  </p>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="mfa">
+    <label><input type="checkbox" name="require_mfa" {% if require_mfa %}checked{% endif %}> Require two-step verification for all members</label>
+    <button type="submit" class="button">Save</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Single sign-on (OpenID Connect)</h2></div>
+  {% if not sso_available %}
+    <p>Single sign-on is available on the Business plan. <a href="{% url 'billing_overview' %}">See plans</a>.</p>
+  {% else %}
+    <p>Register this application with your identity provider using:</p>
+    <dl class="definition-list">
+      <dt>Redirect URI</dt><dd><code>{{ redirect_uri }}</code></dd>
+      <dt>Sign-in link for your team</dt><dd><code>{{ login_url }}</code></dd>
+    </dl>
+    {% if connection and connection.last_login_at %}
+      <p>Last successful sign-on: {{ connection.last_login_at|date:"j M Y H:i" }} UTC.</p>
+    {% endif %}
+    <form method="post" class="stacked-form">
+      {% csrf_token %}
+      <input type="hidden" name="form" value="sso">
+      {% if form.non_field_errors %}<div class="flash flash-error">{{ form.non_field_errors }}</div>{% endif %}
+      {{ form.as_p }}
+      <p class="help">
+        Workspace owners can always sign in with a password, so a misconfigured provider
+        cannot lock the workspace out of these settings.
+      </p>
+      <button type="submit" class="button">Save single sign-on settings</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

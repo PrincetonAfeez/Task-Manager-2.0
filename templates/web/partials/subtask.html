@@ -1,0 +1,12 @@
+<li class="subtask{% if subtask.is_done %} is-done{% endif %}" id="subtask-{{ subtask.id }}">
+  <form method="post" action="{% url 'subtask_toggle' subtask.task_id subtask.id %}">
+    {% csrf_token %}
+    <button type="submit"
+            class="task-check{% if subtask.is_done %} is-done{% endif %}"
+            aria-label="{% if subtask.is_done %}Reopen{% else %}Complete{% endif %} {{ subtask.title }}"
+            hx-post="{% url 'subtask_toggle' subtask.task_id subtask.id %}"
+            hx-target="#subtask-{{ subtask.id }}"
+            hx-swap="outerHTML"></button>
+  </form>
+  <span>{{ subtask.title }}</span>
+</li>

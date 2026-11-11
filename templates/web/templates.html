@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Task templates · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Task templates</h1></section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Your templates</h2></div>
+  <table class="data-table">
+    <thead><tr><th scope="col">Name</th><th scope="col">Creates</th><th scope="col">Subtasks</th><th scope="col">Used</th><th scope="col"></th></tr></thead>
+    <tbody>
+      {% for template in templates %}
+        <tr>
+          <td>{{ template.name }}<br><span class="muted small">{{ template.description }}</span></td>
+          <td>{{ template.title_template }}</td>
+          <td>{{ template.subtask_titles|length }}</td>
+          <td>{{ template.times_used }}</td>
+          <td>
+            {% if "task.create" in can %}
+              <form method="post" action="{% url 'template_apply' template.id %}">
+                {% csrf_token %}
+                <button type="submit">Use</button>
+              </form>
+              <form method="post" action="{% url 'template_delete' template.id %}" data-confirm="Delete this template?">
+                {% csrf_token %}
+                <button type="submit" class="button ghost">Delete</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="empty">No templates yet. Create one below, or save an existing task as a template.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if "task.create" in can %}
+<section class="panel">
+  <div class="panel-heading"><h2>New template</h2></div>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create template</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

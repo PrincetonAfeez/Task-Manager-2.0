@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Time · Task Manager{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Time tracking</h1>
+  <form method="get" class="inline-form">
+    <label for="days">Window</label>
+    <select id="days" name="days">
+      <option value="7" {% if days == 7 %}selected{% endif %}>7 days</option>
+      <option value="30" {% if days == 30 %}selected{% endif %}>30 days</option>
+      <option value="90" {% if days == 90 %}selected{% endif %}>90 days</option>
+    </select>
+    <label for="scope">Scope</label>
+    <select id="scope" name="scope">
+      <option value="workspace" {% if not scope_mine %}selected{% endif %}>Whole workspace</option>
+      <option value="mine" {% if scope_mine %}selected{% endif %}>Just me</option>
+    </select>
+    <button type="submit">Apply</button>
+  </form>
+</section>
+
+{% include "web/partials/timer.html" with entry=running %}
+
+<div class="metric-strip wide">
+  <div><strong>{{ summary.total_hours }}</strong><span>Hours tracked</span></div>
+  <div><strong>{{ summary.billable_hours }}</strong><span>Billable hours</span></div>
+  <div><strong>{{ summary.entry_count }}</strong><span>Entries</span></div>
+  <div><strong>{{ accuracy.over_estimate }}</strong><span>Over estimate</span></div>
+  <div><strong>{{ accuracy.under_estimate }}</strong><span>Under estimate</span></div>
+</div>
+
+<div class="content-grid">
+  <div class="main-column">
+    <section class="panel">
+      <div class="panel-heading"><h2>Time by task</h2></div>
+      <table class="data-table">
+        <thead><tr><th scope="col">Task</th><th scope="col">Hours</th></tr></thead>
+        <tbody>
+          {% for row in summary.by_task %}
+            <tr>
+              <td><a href="{% url 'task_detail' row.task__id %}">{{ row.task__title }}</a></td>
+              <td>{{ row.seconds|floatformat:0 }}s</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2" class="empty">No time tracked in this window.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Estimate accuracy</h2>
+        <span>{{ accuracy.sampled }} completed task{{ accuracy.sampled|pluralize }} with both an estimate and tracked time</span>
+      </div>
+      <table class="data-table">
+        <thead><tr><th scope="col">Task</th><th scope="col">Estimated</th><th scope="col">Actual</th><th scope="col">Ratio</th></tr></thead>
+        <tbody>
+          {% for row in accuracy.rows %}
+            <tr>
+              <td>{{ row.task }}</td>
+              <td>{{ row.estimate_minutes }}m</td>
+              <td>{{ row.actual_minutes }}m</td>
+              <td>{% if row.ratio %}{{ row.ratio }}x{% else %}-{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="empty">Add estimates to tasks to see accuracy here.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <aside class="side-column">
+    <section class="panel compact">
+      <div class="panel-heading"><h2>Time by person</h2></div>
+      {% for row in summary.by_user %}
+        <div class="list-line">
+          <span>{{ row.user__username }}</span>
+          <strong>{{ row.seconds|floatformat:0 }}s</strong>
+        </div>
+      {% empty %}
+        <p class="empty">No entries.</p>
+      {% endfor %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

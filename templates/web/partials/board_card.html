@@ -1,0 +1,18 @@
+<article class="board-card{% if task.is_overdue %} is-overdue{% endif %}"
+         id="task-{{ task.id }}"
+         draggable="true"
+         data-task-id="{{ task.id }}"
+         data-version="{{ task.version }}"
+         data-move-url="{% url 'board_move' task.id %}">
+  <a class="board-card-title" href="{% url 'task_detail' task.id %}">{{ task.title }}</a>
+  <div class="board-card-meta">
+    {% if task.priority >= 3 %}<span class="priority priority-{{ task.priority }}">P{{ task.priority }}</span>{% endif %}
+    {% if task.due_date %}<span class="{% if task.is_overdue %}is-alert{% endif %}">{{ task.due_date|date:"j M" }}</span>{% endif %}
+    {% if task.assignee %}<span>@{{ task.assignee.get_username }}</span>{% endif %}
+  </div>
+  {% if task.labels.all %}
+    <div class="board-card-labels">
+      {% for label in task.labels.all %}<span class="chip">{{ label.name }}</span>{% endfor %}
+    </div>
+  {% endif %}
+</article>

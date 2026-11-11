@@ -1,0 +1,48 @@
+<div id="task-results">
+  <table class="data-table">
+    <caption class="sr-only">Filtered tasks</caption>
+    <thead>
+      <tr>
+        <th scope="col"><span class="sr-only">Done</span></th>
+        <th scope="col"><a href="?sort=title">Title</a></th>
+        <th scope="col"><a href="?sort=due">Due</a></th>
+        <th scope="col"><a href="?sort=priority">Priority</a></th>
+        <th scope="col">List</th>
+        <th scope="col">Assignee</th>
+        <th scope="col">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for task in tasks %}
+        <tr class="{% if task.is_overdue %}is-overdue{% endif %}">
+          <td>
+            {% if "task.edit" in can %}
+              <form method="post" action="{% url 'toggle_task' task.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="expected_version" value="{{ task.version }}">
+                <button class="task-check{% if task.status == 'completed' %} is-done{% endif %}"
+                        aria-label="Toggle {{ task.title }}"></button>
+              </form>
+            {% endif %}
+          </td>
+          <td><a href="{% url 'task_detail' task.id %}">{{ task.title }}</a></td>
+          <td>{% if task.due_date %}{{ task.due_date }}{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td>P{{ task.priority }}</td>
+          <td>{{ task.task_list.name }}</td>
+          <td>{% if task.assignee %}{{ task.assignee.get_username }}{% else %}<span class="muted">Unassigned</span>{% endif %}</td>
+          <td><mark class="status status-{{ task.status }}">{{ task.get_status_display }}</mark></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="empty">No tasks match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if page.has_other_pages %}
+    <nav class="pagination" aria-label="Pagination">
+      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
+      <span>Page {{ page.number }} of {{ page.paginator.num_pages }} · {{ page.paginator.count }} task{{ page.paginator.count|pluralize }}</span>
+      {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next</a>{% endif %}
+    </nav>
+  {% endif %}
+</div>
