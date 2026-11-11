@@ -7,7 +7,7 @@ redis==6.4.0
 croniter==6.2.2
 psycopg[binary]>=3.2,<4
 gunicorn>=23.0,<24
-whitenoise>=6.9,<7
+whitenoise>=6.12.0,<7
 argon2-cffi>=23.1
 requests>=2.32,<3
 # Identity: field encryption (TOTP seeds, SSO client secrets), ID-token verification,
